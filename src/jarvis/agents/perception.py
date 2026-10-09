@@ -163,7 +163,10 @@ class VisionAgent(Agent):
     name = "vision"
     description = "Interprets authorized camera or image input, within strict inference limits."
     capabilities = ("vision", "ocr", "scene", "camera")
-    requires = ("numpy",)  # only needed for real frame processing
+    # Honest about what the `vision` extra actually installs. numpy alone is not
+    # enough to capture or decode a frame, and declaring a transitive dependency
+    # here would let the agent claim readiness it cannot act on.
+    requires = ("cv2",)  # only needed for real frame processing
 
     def __init__(self, runtime: Any = None, *, host: HostAdapter | None = None) -> None:
         super().__init__(runtime)

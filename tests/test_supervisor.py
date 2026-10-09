@@ -7,10 +7,12 @@ import pytest
 from jarvis.agents.base import Agent, AgentRequest, AgentResult
 from jarvis.core.confidence import Claim, Confidence
 from jarvis.core.options import Dilemma
+from jarvis.core.policy import CallbackApprover
 from jarvis.core.risk import ActionRequest
 from jarvis.core.supervisor import Supervisor, build_dilemma_from_denial
 from jarvis.errors import HardDenial
-from jarvis.runtime import quick_status
+from jarvis.interaction.intents import parse_intent
+from jarvis.runtime import build_runtime, quick_status
 
 
 class EchoAgent(Agent):
@@ -339,3 +341,101 @@ def test_pause_is_reported_separately_from_emergency_stop(runtime):
     assert runtime.run_state == "paused"
     runtime.resume()
     assert runtime.run_state == "running"
+
+
+# --------------------------------------------------------------------------
+# Structural check: the intent vocabulary and the route table are maintained in
+# two different modules, so they drift. This is the test that catches it.
+# --------------------------------------------------------------------------
+
+
+def test_every_intent_the_parser_can_emit_has_a_route():
+    from jarvis.interaction.intents import INTENT_RULES
+
+    emitted = {intent for intent, _keywords in INTENT_RULES} | {"research"}
+    routed = set(Supervisor.ROUTES)
+    missing = sorted(emitted - routed)
+    assert not missing, (
+        f"intents with no route fall through to research silently: {missing}"
+    )
+
+
+def test_every_routed_agent_actually_exists_in_the_registry(runtime):
+    """A route pointing at an agent nobody registered is a silent dead end."""
+    for intent, agent in Supervisor.ROUTES.items():
+        if agent == "supervisor":
+            continue
+        assert runtime.registry.get(agent) is not None, (
+            f"intent {intent!r} routes to agent {agent!r}, which is not registered"
+        )
+
+
+@pytest.mark.parametrize(
+    "text,expected_agent",
+    [
+        ("review this code", "coding"),
+        ("fix this code please", "coding"),
+        ("run the tests", "coding"),
+        ("remind me about the meeting", "productivity"),
+        ("add a task to call the bank", "productivity"),
+        ("make me an excel sheet", "documents"),
+        ("build me an ecommerce website", "webbuilder"),
+    ],
+)
+def test_natural_language_reaches_the_right_agent(runtime, text, expected_agent):
+    """Regression: 'review this code' used to be answered by the research agent."""
+    request = parse_intent(text)
+    assert request.intent != "research", f"{text!r} was not parsed as a specific intent"
+    assert runtime.supervisor.route(request) == expected_agent
+
+
+# --------------------------------------------------------------------------
+# The lock has to survive a restart. A stop that a new process forgets means
+# `jarvis lock` in one shell is undone by simply opening another.
+# --------------------------------------------------------------------------
+
+
+def test_the_emergency_stop_is_written_to_disk(runtime, settings):
+    runtime.emergency_stop()
+    state_file = settings.home / "state.json"
+    assert state_file.is_file(), "the lock was not persisted"
+    import json
+
+    assert json.loads(state_file.read_text(encoding="utf-8"))["emergency_stopped"] is True
+
+
+def test_a_new_runtime_inherits_the_lock(settings, audit, runtime):
+    """The regression this guards: the flag used to be in-memory only, so a new
+    process started in the running state and happily did the work."""
+    runtime.emergency_stop()
+
+    fresh = build_runtime(settings, approver=CallbackApprover(lambda _d: False))
+    try:
+        assert fresh.run_state == "emergency_stopped"
+        assert not fresh.handle("do something").ok
+        fresh.resume()
+    finally:
+        fresh.shutdown()
+
+    # ...and clearing it is persisted too
+    third = build_runtime(settings, approver=CallbackApprover(lambda _d: False))
+    try:
+        assert third.run_state == "running"
+    finally:
+        third.shutdown()
+
+
+def test_an_unreadable_state_file_fails_closed(settings, tmp_path):
+    """If the state file cannot be read, assume stopped - not running.
+
+    Guessing "running" after a crash is the dangerous guess.
+    """
+    settings.ensure_dirs()
+    (settings.home / "state.json").write_text("{ this is not json", encoding="utf-8")
+
+    rt = build_runtime(settings, approver=CallbackApprover(lambda _d: False))
+    try:
+        assert rt.run_state == "emergency_stopped", "an unreadable state file must fail closed"
+        assert not rt.handle("do something").ok
+    finally:
+        rt.shutdown()

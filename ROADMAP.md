@@ -17,7 +17,7 @@ Spec section 38. What the brief asks for and what shipped:
 |---|---|
 | Agent runtime | ✅ supervisor with plan → check → execute → verify → report |
 | Basic model router | ✅ 6 model specs, capability + cost + latency ranking, offline default |
-| Text interface | ✅ CLI, 7 subcommands, 24-command REPL |
+| Text interface | ✅ CLI, 9 subcommands, 24-command REPL |
 | Task manager | ✅ priority, dependencies, retry, pause, interrupt, resume, checkpoints |
 | Basic memory | ✅ 9 categories, SQLite, soft delete, export, secret refusal |
 | Logging | ✅ JSONL audit log, redacted on write, no delete |
@@ -26,7 +26,7 @@ Built ahead of schedule because later phases assume them: risk engine, policy en
 generator A–E, compliance knowledge layer, platform terms engine, revenue pipeline, document
 writers, sandboxed code execution, web scaffolding, multilingual detection.
 
-**Verification:** 444 tests, `ruff check` clean, CLI smoke-tested end to end.
+**Verification:** 456 tests, `ruff check` clean, CLI smoke-tested end to end.
 
 ---
 
@@ -163,7 +163,7 @@ and the refusal path is the cheapest code in the repository.
 ## Progress
 
 ```
-Phase 1  ████████████████████  complete (444 tests)
+Phase 1  ████████████████████  complete (456 tests)
 Phase 2  ░░░░░░░░░░░░░░░░░░░░  seams in place (knowledge gates, Authority scale)
 Phase 3  ██░░░░░░░░░░░░░░░░░░  session model done, no audio backend
 Phase 4  ██░░░░░░░░░░░░░░░░░░  consent + privacy gates done, no capture backend

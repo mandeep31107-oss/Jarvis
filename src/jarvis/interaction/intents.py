@@ -28,9 +28,16 @@ INTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("build", ("/build", "build me a", "build a website", "create a website", "make a website",
                "e-commerce site", "ecommerce site", "landing page", "portfolio site",
                "saas", "web app", "web application")),
+    # NOTE: bare nouns like "invoice" must NOT be here. "Remind me to file the
+    # invoice" is a reminder, not a spreadsheet - a greedy noun matched it to
+    # this rule first and silently produced the wrong document. Document
+    # keywords are format names, or a noun plus a document verb. A format name
+    # like "pdf" is safe; a bare noun like "invoice" is not.
     ("document", ("/doc", "/document", "excel", "spreadsheet", "xlsx", "csv file",
-                  "powerpoint", "presentation", "word document", "pdf", "invoice",
-                  "expense sheet", "report file", "markdown", "readme")),
+                  "powerpoint", "presentation", "word document", "pdf file", "pdf report",
+                  "pdf", "make a pdf", "create a pdf", "expense sheet", "report file",
+                  "invoice template", "invoice document", "create an invoice",
+                  "generate an invoice", "generate invoice", "markdown", "readme")),
     ("coding", ("/code", "debug", "fix this code", "syntax error", "review this code",
                 "refactor", "run the tests", "unit test", "traceback", "stack trace",
                 "write a function", "python script")),

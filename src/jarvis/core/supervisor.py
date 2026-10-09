@@ -128,8 +128,18 @@ class Supervisor:
 
     # ------------------------------------------------------------------ routing
     #: Intent -> agent name. Anything unmapped falls back to research.
+    #: intent name -> agent name.
+    #:
+    #: Every intent the parser can emit MUST appear here. A missing key falls
+    #: through to "research" silently, which is how the coding and productivity
+    #: agents became unreachable from natural language: the parser emitted
+    #: "coding"/"productivity", this table only had the aliases "code" and
+    #: "task", and every such request was quietly answered by research instead.
+    #: tests/test_supervisor.py asserts the two sets stay in step.
     ROUTES: dict[str, str] = {
         "research": "research",
+        "coding": "coding",
+        "productivity": "productivity",
         "revenue": "revenue",
         "compliance": "compliance",
         "code": "coding",

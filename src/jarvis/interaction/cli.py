@@ -318,9 +318,16 @@ Anything without a slash is treated as a normal request.
         _print(outcome.message)
 
     def cmd_lock(self, _arg: str) -> None:
+        """Emergency stop: halts tasks, kills capture, and refuses new work.
+
+        Also engages the host privacy lock. Both are persisted, so the lock
+        survives restarting Jarvis - a stop that a new process forgets is not
+        a stop. /resume clears both.
+        """
         outcome = self.runtime.host.lock()
         _print(outcome.message)
-        _print("Say /resume (or restart) after unlocking. Jarvis stays paused until then.")
+        _print(self.runtime.emergency_stop())
+        _print("The lock is persisted. Run /resume to clear it.")
 
     def cmd_pause(self, _arg: str) -> None:
         _print(self.runtime.pause())
@@ -460,6 +467,17 @@ def _cmd_check_secret(_runtime: Runtime, args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_lock(runtime: Runtime, _args: argparse.Namespace) -> int:
+    """Emergency stop from the command line. Always available, never gated."""
+    _print(runtime.emergency_stop())
+    return 0
+
+
+def _cmd_resume(runtime: Runtime, _args: argparse.Namespace) -> int:
+    _print(runtime.resume())
+    return 0
+
+
 def _cmd_config(runtime: Runtime, args: argparse.Namespace) -> int:
     """Print the effective configuration with secret values masked."""
     view = runtime.settings.redacted_view()
@@ -507,6 +525,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="print configuration (the default for this subcommand)",
     )
 
+    sub.add_parser("resume", help="clear an emergency stop and accept work again")
+    sub.add_parser("lock", help="emergency stop: halt tasks, kill capture, refuse new work")
+
     p = sub.add_parser("check-secret", help="scan text for credential-shaped content")
     p.add_argument("text", nargs="?", default="-", help="text to scan, or '-' for stdin")
 
@@ -518,7 +539,10 @@ def build_parser() -> argparse.ArgumentParser:
 #: treated as a one-shot request, so `jarvis "explain X"` works the way people
 #: expect a CLI agent to work.
 _SUBCOMMANDS = frozenset(
-    {"run", "status", "audit", "revenue", "config", "check-secret", "repl", "help"}
+    {
+        "run", "status", "audit", "revenue", "config", "check-secret",
+        "resume", "lock", "repl", "help",
+    }
 )
 
 
@@ -561,6 +585,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "revenue": _cmd_revenue,
         "check-secret": _cmd_check_secret,
         "config": _cmd_config,
+        "resume": _cmd_resume,
+        "lock": _cmd_lock,
         "repl": _cmd_repl,
     }
     handler = handlers.get(args.command or "")

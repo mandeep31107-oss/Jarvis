@@ -283,8 +283,9 @@ def test_bare_text_is_treated_as_a_one_shot_request(capsys, tmp_path, monkeypatc
 
 def test_a_fulfilled_request_exits_zero(capsys, tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_HOME", str(tmp_path / "h"))
-    assert cli.main(["run", "remind me to file the invoice tomorrow"]) == 0
-    capsys.readouterr()
+    assert cli.main(["run", "remind me about the meeting"]) == 0
+    out = capsys.readouterr().out
+    assert "[productivity]" in out, out
 
 
 def test_repl_config_command_does_not_leak(capsys, tmp_path, monkeypatch):

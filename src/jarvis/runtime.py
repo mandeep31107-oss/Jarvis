@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from jarvis.agents.base import AgentRequest
@@ -65,7 +66,52 @@ class Runtime:
     terms: TermsRegistry = field(default_factory=TermsRegistry)
     #: Set by emergency_stop(), cleared by resume(). New work is refused while it
     #: is set, so "stop" means stop and not merely "finish what is running".
+    #: Persisted to disk: a stop that a new process forgets is not a stop.
     emergency_stopped: bool = False
+
+    # --- persisted safety state ---------------------------------------------
+    @property
+    def state_path(self) -> Path:
+        return self.settings.home / "state.json"
+
+    def _save_state(self) -> None:
+        from jarvis.util.clock import now_iso
+        from jarvis.util.store import write_json
+
+        write_json(
+            self.state_path,
+            {
+                "emergency_stopped": self.emergency_stopped,
+                "privacy_locked": self.host.privacy_mode.value == "locked",
+                "updated": now_iso(),
+            },
+        )
+
+    def _load_state(self) -> None:
+        """Restore the safety state written by a previous process.
+
+        Fails closed: an unreadable state file is treated as *stopped*, because
+        guessing "running" after a crash is the dangerous guess.
+        """
+        from jarvis.util.store import read_json
+
+        # Check existence BEFORE reading: read_json quarantines an unreadable
+        # file by renaming it to <name>.corrupt, so the path stops existing as a
+        # side effect of the read and a later is_file() would report False.
+        existed = self.state_path.is_file()
+        data = read_json(self.state_path, default=None)
+        if data is None and existed:
+            self.emergency_stopped = True
+            log.warning(
+                "state file unreadable; assuming emergency stop is still active "
+                "(the unreadable copy is preserved alongside it as .corrupt)"
+            )
+            return
+        if data:
+            self.emergency_stopped = bool(data.get("emergency_stopped"))
+            if data.get("privacy_locked"):
+                with contextlib.suppress(Exception):
+                    self.host.lock()
 
     # --- main entry ----------------------------------------------------------
     def handle(
@@ -91,7 +137,7 @@ class Runtime:
                 request=request,
                 error=(
                     "EMERGENCY STOP is active. Jarvis is not doing any work. "
-                    "Run /resume (or `jarvis run --resume`) when you want it to continue."
+                    "Run `jarvis resume` (or /resume in the REPL) when you want it to continue."
                 ),
             )
         execution = self.supervisor.handle(request)
@@ -188,6 +234,9 @@ class Runtime:
         was_stopped = self.emergency_stopped
         self.emergency_stopped = False
         self.tasks.resume()
+        with contextlib.suppress(Exception):
+            self.host.unlock_agent()
+        self._save_state()
         self.audit.log(
             "runtime.resumed", result="ok", agent="runtime",
             meta={"from": "emergency_stop" if was_stopped else "pause"},
@@ -203,6 +252,7 @@ class Runtime:
         observable afterwards - a stop the user cannot confirm is not a stop.
         """
         self.emergency_stopped = True
+        self._save_state()
         self.tasks.stop()
         with contextlib.suppress(Exception):
             self.host.camera_off()
@@ -216,7 +266,8 @@ class Runtime:
         )
         return (
             "EMERGENCY STOP - all tasks halted, capture devices off. "
-            "No new work will be accepted until you run /resume."
+            "No new work will be accepted until you run `jarvis resume` (or /resume). "
+            "This lock is persisted and survives a restart."
         )
 
     def set_approver(self, approver: Approver) -> None:
@@ -297,12 +348,19 @@ def build_runtime(
         jurisdictions=jurisdictions,
         terms=terms,
     )
+    # Restore the safety state a previous process left behind, before the first
+    # audit record, so the startup entry reflects the state Jarvis is really in.
+    runtime._load_state()
     audit.log(
         "runtime.start",
         agent="supervisor",
         result=f"Jarvis {__version__} phase {PHASE} ({PHASE_NAME})",
         risk="low",
-        meta={"autonomy": settings.autonomy, "jurisdiction": settings.jurisdiction},
+        meta={
+            "autonomy": settings.autonomy,
+            "jurisdiction": settings.jurisdiction,
+            "run_state": runtime.run_state,
+        },
     )
     events.publish("runtime.start", version=__version__, phase=PHASE)
     return runtime

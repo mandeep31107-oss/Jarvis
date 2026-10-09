@@ -12,6 +12,8 @@ pip install -e .
 jarvis status
 jarvis "summarise the EU rules on selling digital services"
 jarvis revenue "websites for local clinics"
+jarvis lock                 # emergency stop - persists across restarts
+jarvis resume               # clear it
 jarvis                      # interactive REPL
 ```
 
@@ -131,16 +133,19 @@ $ jarvis
 24 slash commands (`/help` lists them). Unknown commands, bad arguments, and agent failures are
 caught and reported; the REPL does not crash on a bad line.
 
-`/lock` halts everything and refuses new work until `/resume`. The stop is audited, shown as
-`run_state: emergency_stopped` in `jarvis status`, and cannot be bypassed by a higher autonomy
-level or a more privileged actor.
+`/lock` (or `jarvis lock`) halts all tasks, kills capture devices, engages the host privacy lock
+and refuses new work. The lock is **persisted to disk**, so opening a new shell does not undo it —
+`jarvis resume` clears it. Every stop and resume is audited, and the state is shown as
+`run_state: EMERGENCY_STOPPED` at the top of `jarvis status`. No autonomy level or actor bypasses
+it. If the state file cannot be read, Jarvis assumes it is still stopped rather than guessing
+that it may run.
 
 ---
 
 ## Verification
 
 ```bash
-python -m pytest tests/ -q        # 444 tests
+python -m pytest tests/ -q        # 456 tests
 ruff check src tests              # clean
 ```
 
