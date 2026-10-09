@@ -26,7 +26,7 @@ Built ahead of schedule because later phases assume them: risk engine, policy en
 generator A–E, compliance knowledge layer, platform terms engine, revenue pipeline, document
 writers, sandboxed code execution, web scaffolding, multilingual detection.
 
-**Verification:** 577 tests, `ruff check` clean, CLI smoke-tested end to end.
+**Verification:** 579 tests, `ruff check` clean, CLI smoke-tested end to end.
 
 ---
 

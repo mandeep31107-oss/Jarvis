@@ -193,7 +193,7 @@ that it may run.
 ## Verification
 
 ```bash
-python -m pytest tests/ -q        # 577 tests
+python -m pytest tests/ -q        # 579 tests
 ruff check src tests              # clean
 ```
 

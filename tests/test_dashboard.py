@@ -277,3 +277,34 @@ def test_head_requests_are_answered(server):
     with urllib.request.urlopen(request, timeout=10) as resp:
         assert resp.status == 200
         assert resp.read() == b""
+
+
+def test_the_system_section_reports_the_always_active_state(runtime):
+    """The first question about a background loop is whether it is running; it
+    should not be buried in the raw status payload."""
+    assert Dashboard(runtime).snapshot()["system"]["loop"] == {"enabled": False}
+
+    from jarvis.core.loop import AlwaysActiveLoop
+
+    loop = AlwaysActiveLoop(runtime, interval_s=0.05)
+    runtime.loop = loop
+    loop.start()
+    try:
+        section = Dashboard(runtime).snapshot()["system"]["loop"]
+        assert section["running"] is True
+        assert "iterations" in section
+    finally:
+        loop.stop()
+
+
+def test_the_page_renders_every_section_without_a_template_error():
+    """Guard the inline JS: a bad field name renders a blank card rather than
+    throwing, which is easy to miss without loading the page."""
+    from jarvis.dashboard import PAGE
+
+    for marker in (
+        "1 · System", "2 · Agents", "3 · Tasks", "4 · Risk", "5 · Audit",
+        "6 · Memory", "7 · Knowledge", "8 · Compliance", "9 · Platform",
+        "10 · Models", "11 · Host", "12 · Revenue", "13 · Security", "14 · Activity",
+    ):
+        assert marker in PAGE, f"the page has no card for {marker!r}"

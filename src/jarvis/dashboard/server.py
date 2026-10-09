@@ -75,6 +75,9 @@ class Dashboard:
             "phase_name": status["phase_name"],
             "run_state": status["run_state"],
             "settings": status["settings"],
+            # Always-active state belongs here, not hidden in the raw status: the
+            # first question about a background loop is whether it is running.
+            "loop": status.get("loop", {"enabled": False}),
         }
 
     def _section_agents(self) -> dict[str, Any]:
@@ -370,6 +373,9 @@ const R = {
       jurisdiction: d.settings.jurisdiction,
       fetch_enabled: d.settings.fetch_enabled ? 'on' : 'off',
       computer_use: d.settings.computer_use ? 'on' : 'off',
+      always_active: (d.loop && d.loop.enabled === false) ? 'not configured'
+        : (d.loop.running ? `running (${d.loop.iterations} ticks, ${d.loop.tasks_processed} tasks)`
+                          : 'stopped'),
     }));
   },
   agents(d) {
