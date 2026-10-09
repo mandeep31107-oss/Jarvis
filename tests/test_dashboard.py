@@ -308,3 +308,16 @@ def test_the_page_renders_every_section_without_a_template_error():
         "10 · Models", "11 · Host", "12 · Revenue", "13 · Security", "14 · Activity",
     ):
         assert marker in PAGE, f"the page has no card for {marker!r}"
+
+
+def test_the_system_section_forwards_the_phase_boundaries(runtime):
+    """This section builds its own dict, so a new status() field must be named
+    here or it silently never reaches the UI. That happened once already."""
+    from jarvis.version import PARTIAL_PHASES
+
+    section = Dashboard(runtime).snapshot()["system"]
+
+    assert section["partial_phases"], "the boundaries must reach the dashboard"
+    assert set(section["partial_phases"]) == {str(n) for n in PARTIAL_PHASES}
+    for number, detail in section["partial_phases"].items():
+        assert detail["boundary"].strip(), f"phase {number} must say what is missing"

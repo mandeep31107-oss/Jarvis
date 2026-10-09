@@ -78,6 +78,11 @@ class Dashboard:
             # Always-active state belongs here, not hidden in the raw status: the
             # first question about a background loop is whether it is running.
             "loop": status.get("loop", {"enabled": False}),
+            # What each partially built phase is missing. This section builds its
+            # own dict rather than forwarding status(), so a new field has to be
+            # named here or it silently never reaches the UI - which is exactly
+            # what happened the first time this was added to status() alone.
+            "partial_phases": status.get("partial_phases", {}),
         }
 
     def _section_agents(self) -> dict[str, Any]:
