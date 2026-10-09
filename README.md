@@ -3,9 +3,11 @@
 An autonomous personal agent that does useful work — research, analysis, documents, code,
 compliance review, and revenue evaluation — under an explicit risk and permission model.
 
-**Current state: Phase 2 of 9.** The core runtime and live research are implemented and tested.
-Voice, camera control, and browser automation are interface-shaped stubs that refuse honestly
-rather than pretend to work. See [ROADMAP.md](ROADMAP.md) for what exists and what does not.
+**Current state: Phase 2 complete end to end, with working cores in phases 3-6.**
+Voice audio, vision, computer use, and revenue execution are all real and tested — each with one
+boundary that is environmental rather than a gap in the code, named in the table below and in
+`jarvis status`. Nothing here is an interface-shaped stub that pretends to work.
+See [ROADMAP.md](ROADMAP.md) for what exists and what does not.
 
 ```
 pip install -e .
@@ -61,15 +63,21 @@ There are **zero runtime dependencies**. The core runs on the standard library a
 | Model router | ✅ working | offline by default; cloud models need a provider |
 | Multilingual text (EN / Hindi / Hinglish) | ✅ working | script-then-lexicon detection |
 | Audit log | ✅ working | JSONL, redacted, no delete by design |
-| Voice (STT / TTS / interruption) | ⚠️ **stub** | session model + interruption semantics work; **no audio backend** |
-| Vision / camera | ⚠️ **stub** | consent + privacy-mode gates work; **no capture backend** |
-| Computer control | ⚠️ **stub** | Linux `xdg-open` only; no keyboard/mouse control |
+| Voice: WAV I/O, DSP, VAD, barge-in | ✅ working | stdlib PCM, noise-floor-calibrated detection |
+| Voice: transcription / synthesis | ❌ needs a model | no STT/TTS backend bundled; refuses rather than guessing |
+| Vision: PNG codec + frame analysis | ✅ working | dependency-free; verified against ImageMagick |
+| Vision: camera capture, scene meaning | ❌ needs hardware / a model | no capture device here; no interpretation without a model |
+| Computer use: process table from `/proc` | ✅ working | cross-checked against `ps` |
+| Computer use: click / type / screenshot | ❌ needs a display server | names the missing piece instead of "not implemented" |
+| Revenue: plan → approve → execute → monitor | ✅ working | gated per step; money/accounts/terms always need you |
 | Live research: fetch a URL, verify, store | ✅ working | robots-respecting, SSRF-guarded, opt-in |
+| Package lookup (PyPI) | ✅ working | exact-name lookup; no key; shares the SSRF-guarded fetcher |
 | Dashboard: 14 sections, local web UI | ✅ working | read-only by default |
 
 
-Every ⚠️ and ❌ above raises `CapabilityUnavailable` or returns an explicit "not implemented"
-outcome. Nothing fabricates a result.
+Every ❌ above raises `CapabilityUnavailable` or returns an explicit outcome naming the missing
+piece — a model, a capture device, or a display server. Nothing fabricates a result, and a
+capability that is unavailable says *why* rather than reporting a blank refusal.
 
 ---
 
@@ -193,7 +201,7 @@ that it may run.
 ## Verification
 
 ```bash
-python -m pytest tests/ -q        # 579 tests
+python -m pytest tests/ -q        # 778 tests
 ruff check src tests              # clean
 ```
 

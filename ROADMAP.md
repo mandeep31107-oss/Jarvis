@@ -26,7 +26,7 @@ Built ahead of schedule because later phases assume them: risk engine, policy en
 generator A–E, compliance knowledge layer, platform terms engine, revenue pipeline, document
 writers, sandboxed code execution, web scaffolding, multilingual detection.
 
-**Verification:** 579 tests, `ruff check` clean, CLI smoke-tested end to end.
+**Verification:** 778 tests, `ruff check` clean, CLI smoke-tested end to end.
 
 ---
 
@@ -48,15 +48,26 @@ stored that failed a gate.
 
 ---
 
-## Phase 3 — Voice
+## Phase 3 — Voice ⚠️ **audio core built; transcription is not**
 
-The session model exists and is tested: interruption, suspend, resume, history, multilingual
-routing. What is missing is audio.
+**Built and tested** (`jarvis/voice/`, stdlib only — `audioop` is deprecated and slated for
+removal in 3.13, so it is not used):
+
+- 16-bit PCM WAV reading and writing, RMS, zero-crossing rate, envelopes, stereo interleave
+- Voice-activity detection calibrated against each recording's own noise floor, not a fixed
+  threshold; endpointing keeps pauses between words inside one utterance while splitting on a
+  real change of mind; a minimum duration rejects clicks
+- Barge-in detection: `VoiceSession.detect_barge_in()` decides from the samples, ignoring
+  speech that belongs to the original request so Jarvis does not interrupt itself
+- Verified against hand-derivable values: a 440 Hz sine reads 878 Hz of zero crossings and
+  RMS 0.3535 (= 0.5/√2); a phrase at 0.4–1.0 s is detected at 0.39–1.01 s
+
+**Still missing:**
 
 - STT and TTS provider adapters (`SpeechToText` / `TextToSpeech` protocols are defined;
-  `NullSpeechToText` raises rather than fabricating a transcript)
+  `NullSpeechToText` raises rather than fabricating a transcript). Turning samples into words
+  needs a model and none is bundled.
 - Push-to-talk and wake-word, with the wake-word explicitly **not** usable as authentication
-- Interruption handling against real audio timing
 - Language auto-switch on the detected language of each utterance
 
 **Hard constraint from the brief:** voice is never the sole authentication mechanism for a
@@ -65,20 +76,54 @@ stays exactly where it is.
 
 ---
 
-## Phase 4 — Vision and camera
+## Phase 4 — Vision ⚠️ **codec and analysis built; capture and meaning are not**
 
-- Capture adapters behind the existing `Device` consent gate and `PrivacyMode`
+**Built and tested** (`jarvis/vision/`, no third-party dependency):
+
+- A PNG reader and writer on `zlib`/`struct` alone: greyscale, grey+alpha, RGB, RGBA and
+  paletted images, 1/2/4/8-bit depths, all five scanline filters, CRC verified per chunk
+- Frame analysis: brightness, luma histogram, dominant colour, edge density, and frame-to-frame
+  motion with a normalised centre of activity
+- Interlaced and 16-bit images are **refused with a reason** rather than mis-decoded
+- Cross-verified against ImageMagick: 48 pixel comparisons across all five filter types,
+  greyscale and 1-bit/8-bit palettes, zero mismatches; ImageMagick also reads back what the
+  writer produces. Three real bugs were found this way, including one that returned correct
+  dimensions with every pixel zero.
+- `VisionAgent` reports measurements and records `interpreted=False`
+
+**Still missing:**
+
+- Camera capture. This sandbox has no `/dev/video*`, so a capture adapter cannot be verified
+  here and is not written. It would sit behind the existing `Device` consent gate.
+- Scene interpretation. Describing what an image *means* needs a vision model; without one the
+  agent says so instead of guessing.
 - A **visible** indicator whenever the camera is on; `camera.record_covert` stays hard-denied
-- Screen reading for accessibility and automation support
 - Redaction of faces and documents before anything is stored
 
 **Hard constraint:** no covert recording, indicator always visible, user can disable at any time.
 
 ---
 
-## Phase 5 — Computer use
+## Phase 5 — Computer use ⚠️ **process layer built; GUI control is not**
 
-The `host/` adapters are the seam. Linux `xdg-open` is the only working action today.
+**Built and tested** (`jarvis/host/procfs.py`):
+
+- The process table read straight from `/proc`: pid, name, full command line, state, parent,
+  owner, RSS, and CPU seconds converted from clock ticks (reported raw they would overstate
+  CPU use a hundredfold)
+- `/proc/<pid>/stat` parsed around the parenthesised `comm`, which may contain spaces and even
+  `) (` — splitting on whitespace shifts every later field and yields nonsense rather than an
+  error
+- `AppInfo.running` is now derived from the process table. It was hardcoded `False`, which made
+  the field a lie rather than an absence.
+- Cross-checked against `ps`, which reads `/proc` by its own route: 76 shared PIDs, zero name
+  and zero parent mismatches
+- Listing processes needs no `JARVIS_COMPUTER_USE` switch — observing is not controlling
+- Screenshot, UI control and shortcuts name the missing display server instead of saying
+  "not implemented", so a policy refusal is distinguishable from an environment with nothing
+  to look at
+
+**Still missing:**
 
 - Accessibility-API driven control per platform (AT-SPI / UI Automation / Android Accessibility)
 - Element targeting by description, not by pixel coordinates alone
@@ -90,13 +135,33 @@ stays off by default and is the master switch.
 
 ---
 
-## Phase 6 — Revenue execution
+## Phase 6 — Revenue execution ⚠️ **execution and monitoring built; money is not**
 
-Phase 1 analyses opportunities. Phase 6 acts on them.
+**Built and tested** (`jarvis/revenue/execution.py`):
 
-- The approved-option execution path, through `Supervisor.propose()` like everything else
+- `Executor` runs an approved plan's steps in order, asking the policy engine about **each step
+  individually** at the moment it runs. Approval of a plan is not approval of every consequence
+  of it, so a forbidden verb inside an approved plan is still refused, and a refusal stops the
+  run rather than being stepped over.
+- An unapproved plan executes nothing. Approvals are recorded per plan, with who and when, and
+  are never inferred.
+- A durable ledger under the runtime home, so a plan survives a restart and can be audited. A
+  corrupt ledger is quarantined to `.corrupt` rather than overwritten — erasing the audit trail
+  to make a run work is not acceptable.
+- `Monitor` evaluates thresholds and reports only breaches; a metric that is not being measured
+  is not reported as healthy. Thresholds come from the model's own numbers, so the break-even
+  alert fires where the plan actually stops working.
+- `RevenueAgent.plan_from_assessment()` turns requirements into steps and
+  `monitor_rules()` derives what to watch
+
+**Deliberately never automated:** moving money, opening accounts, verifying identity, signing
+contracts, filing tax, accepting terms. These are reported as `blocked_on_user` — a state
+distinct from `failed`, because one means a person must act and the other means Jarvis tried and
+could not.
+
+**Still missing:**
+
 - Payment and payout integration **inside each platform's sanctioned channel only**
-- Monitoring against the projection, with a report when reality diverges
 - Tax estimation flagged as an estimate, with the disclaimer, never as advice
 
 **Hard constraint:** every spend and every payout is HIGH or CRITICAL and asks. CRITICAL always
@@ -174,12 +239,12 @@ and the refusal path is the cheapest code in the repository.
 ## Progress
 
 ```
-Phase 1  ████████████████████  complete (522 tests)
-Phase 2  ████████████████░░░░  fetch+extract+verify done; no search provider
-Phase 3  ██░░░░░░░░░░░░░░░░░░  session model done, no audio backend
-Phase 4  ██░░░░░░░░░░░░░░░░░░  consent + privacy gates done, no capture backend
-Phase 5  █░░░░░░░░░░░░░░░░░░░  xdg-open only
-Phase 6  ██░░░░░░░░░░░░░░░░░░  analysis done, no execution
+Phase 1  ████████████████████  complete
+Phase 2  ████████████████████  fetch+extract+verify, plus a bundled PyPI lookup
+Phase 3  ██████████░░░░░░░░░░  WAV I/O + DSP + VAD + barge-in; transcription needs a model
+Phase 4  ██████████░░░░░░░░░░  PNG codec + frame analysis; no camera, no scene meaning
+Phase 5  ████████░░░░░░░░░░░░  /proc process table; GUI control needs a display server
+Phase 6  ██████████████░░░░░░  plan → approve → execute → monitor; money always needs you
 Phase 7  ████████████████████  complete (14 sections, read-only)
 Phase 8  ████████████████░░░░  loop + rush mode done; OS autostart is text only
 Phase 9  ░░░░░░░░░░░░░░░░░░░░  not started

@@ -404,3 +404,18 @@ def test_rush_mode_works_with_no_memory(tasks):
     assert reminders_from_memory(None) == []
     plan = plan_rush(tasks, budget_minutes=30, extra_items=[])
     assert "nothing is queued" in plan.render()
+
+
+def test_status_names_the_boundary_of_every_partially_built_phase(tmp_path) -> None:
+    """"Partially built" without saying which part is the same as saying nothing."""
+    from jarvis.config import Settings
+    from jarvis.runtime import build_runtime
+    from jarvis.version import PARTIAL_PHASES
+
+    status = build_runtime(Settings(home=tmp_path)).status()
+
+    reported = status["partial_phases"]
+    assert set(reported) == {str(n) for n in PARTIAL_PHASES}
+    for number, detail in reported.items():
+        assert detail["built"].strip(), f"phase {number} must say what is built"
+        assert detail["boundary"].strip(), f"phase {number} must say what is missing"

@@ -40,7 +40,7 @@ from jarvis.core.supervisor import AgentRegistry, Execution, Supervisor
 from jarvis.core.tasks import TaskManager
 from jarvis.host import HostAdapter, detect_host
 from jarvis.interaction.intents import parse_intent
-from jarvis.version import PHASE, PHASE_NAME, __version__
+from jarvis.version import PARTIAL_PHASES, PHASE, PHASE_NAME, __version__
 
 log = logging.getLogger("jarvis.runtime")
 
@@ -190,6 +190,13 @@ class Runtime:
             "version": __version__,
             "phase": PHASE,
             "phase_name": PHASE_NAME,
+            #: Phases that have a working core and one boundary this codebase
+            #: cannot cross alone. Surfaced in status so "partially built" always
+            #: comes with the part that is missing.
+            "partial_phases": {
+                str(number): {"built": built, "boundary": boundary}
+                for number, (built, boundary) in sorted(PARTIAL_PHASES.items())
+            },
             "run_state": self.run_state,
             "loop": self.loop.state.as_dict() if self.loop is not None else {"enabled": False},
             "settings": self.settings.redacted_view(),
