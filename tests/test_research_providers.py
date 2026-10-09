@@ -411,3 +411,23 @@ def test_an_explanation_is_given_when_a_query_is_not_a_name() -> None:
     assert "exact name lookup" in reason
     #: States the boundary honestly instead of implying capability it lacks.
     assert "JavaScript challenge" in reason
+
+
+def test_the_agent_says_which_case_it_is_when_a_search_finds_nothing() -> None:
+    """"Configure a search provider" is false when one is configured and declined."""
+    from jarvis.agents.base import AgentRequest
+    from jarvis.agents.research import ResearchAgent
+
+    declined = ResearchAgent(provider=PyPILookup(fetcher=FakeFetcher()))
+    message = declined.run(AgentRequest("research", "tell me about the requests package"))
+
+    assert message.ok is False
+    joined = " ".join(message.follow_ups)
+    assert "Configure a search provider" not in joined
+    assert "pypi provider returned nothing" in joined
+    assert "package names" in joined
+
+    absent = ResearchAgent(provider=None)
+    other = absent.run(AgentRequest("research", "anything at all"))
+
+    assert "Configure a search provider" in " ".join(other.follow_ups)

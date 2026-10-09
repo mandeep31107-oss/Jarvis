@@ -146,11 +146,23 @@ class ResearchAgent(Agent):  # noqa: PLR0912
                     "No fetcher is configured, so Jarvis cannot read a URL you give it either."
                 )
             result.add_claim(Claim.unknown(f"Answer to '{query}'", why="no verified source available"))
-            result.follow_ups.extend(
-                [
-                    "Configure a search provider to enable live research.",
-                    "Or give me a source URL and I will record it with its authority and date.",
-                ]
+            #: "Configure a search provider" is only true when there is none. When
+            #: one is configured and simply declined this query, saying so - with
+            #: its own reason - is the difference between a fixable misunderstanding
+            #: and a dead end.
+            if self.provider is None:
+                result.follow_ups.append("Configure a search provider to enable live research.")
+            else:
+                reason = ""
+                explain = getattr(self.provider, "explain", None)
+                if callable(explain):
+                    reason = str(explain() or "").strip()
+                result.follow_ups.append(
+                    f"The {getattr(self.provider, 'name', 'search')} provider returned nothing: "
+                    + (reason or "no match for that query.")
+                )
+            result.follow_ups.append(
+                "Or give me a source URL and I will record it with its authority and date."
             )
             return result
 
