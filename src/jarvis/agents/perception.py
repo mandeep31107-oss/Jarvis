@@ -163,10 +163,11 @@ class VisionAgent(Agent):
     name = "vision"
     description = "Interprets authorized camera or image input, within strict inference limits."
     capabilities = ("vision", "ocr", "scene", "camera")
-    # Honest about what the `vision` extra actually installs. numpy alone is not
-    # enough to capture or decode a frame, and declaring a transitive dependency
-    # here would let the agent claim readiness it cannot act on.
-    requires = ("cv2",)  # only needed for real frame processing
+    #: Nothing is required to measure a PNG: the codec in jarvis.vision.png and
+    #: the statistics in jarvis.vision.analysis are pure standard library.
+    #: cv2 would only add faster or fancier analysis, not basic capability, so
+    #: declaring it here would have made this agent "unready" while it worked.
+    requires = ()
 
     def __init__(self, runtime: Any = None, *, host: HostAdapter | None = None) -> None:
         super().__init__(runtime)
@@ -184,7 +185,59 @@ class VisionAgent(Agent):
             return result
 
         available, reason = self.available()
-        if self.host.camera_active or request.param("image_path"):
+
+        #: An image the user handed over is measurable right now, with no camera
+        #: and no model: the codec and the frame statistics are pure stdlib.
+        image_path = (request.param("image_path") or "").strip()
+        if image_path:
+            measured = self._measure(image_path, request.param("compare_with") or "")
+            if measured is not None:
+                result.data.update(measured)
+                result.ok = True
+                result.summary = (
+                    f"{measured['width']}x{measured['height']} {measured['mode']} image, "
+                    f"mean brightness {measured['brightness']:.2f}, "
+                    f"dominant colour {measured['dominant_colour']} "
+                    f"covering {measured['dominant_share'] * 100:.0f}% of pixels."
+                )
+                result.add_claim(
+                    Claim(
+                        statement=result.summary,
+                        confidence=Confidence.HIGH,
+                        caveats=[
+                            "these are measurements of pixels, not an understanding of the scene"
+                        ],
+                    )
+                )
+                if "motion" in measured:
+                    result.add_claim(
+                        Claim.certain(
+                            f"Change between the two frames: score {measured['motion']['score']:.3f}, "
+                            f"{measured['motion']['changed_share'] * 100:.1f}% of compared pixels moved."
+                        )
+                    )
+                result.add_claim(
+                    Claim(
+                        statement="Jarvis has not interpreted the image's meaning.",
+                        confidence=Confidence.HIGH,
+                        caveats=[
+                            "describing what a scene *means* needs a vision model, which is not configured"
+                        ],
+                    )
+                )
+                result.follow_ups.append(
+                    "For 'what is in this picture' you need a vision-capable model provider."
+                )
+                return result
+            result.ok = False
+            result.summary = (
+                f"Could not read '{image_path}'. Jarvis reads PNG images; a damaged or "
+                "unsupported file is refused rather than guessed at."
+            )
+            result.add_claim(Claim.certain(result.summary))
+            return result
+
+        if self.host.camera_active:
             result.add_claim(
                 Claim(
                     statement="Frame analysis requires a vision model provider, which is not configured.",
@@ -197,6 +250,8 @@ class VisionAgent(Agent):
             result.follow_ups.append("Configure a vision-capable model provider to enable this.")
             return result
 
+        del available  # the camera branch below explains itself through `reason`
+
         result.ok = False
         result.summary = f"Camera is not active: {reason}"
         result.add_claim(Claim.certain(f"Camera state: {'on' if self.host.camera_active else 'off'}."))
@@ -207,6 +262,52 @@ class VisionAgent(Agent):
             ]
         )
         return result
+
+    def _measure(self, image_path: str, compare_with: str) -> dict[str, Any] | None:
+        """Measure an image file, or return None if it cannot be read.
+
+        Returns pixel measurements only. Nothing here attempts to say what the
+        image *is* - that would need a model, and guessing would be worse than
+        saying so.
+        """
+        from pathlib import Path
+
+        from jarvis.vision.analysis import difference, frame_stats
+        from jarvis.vision.png import PngError, read_png
+
+        try:
+            image = read_png(Path(image_path))
+        except (PngError, OSError):
+            return None
+
+        stats = frame_stats(image)
+        out: dict[str, Any] = {
+            "path": image_path,
+            "width": stats.width,
+            "height": stats.height,
+            "mode": image.mode,
+            "brightness": round(stats.brightness, 4),
+            "darkest": round(stats.darkest, 4),
+            "brightest": round(stats.brightest, 4),
+            "dominant_colour": list(stats.dominant_colour),
+            "dominant_share": round(stats.dominant_share, 4),
+            "edge_density": round(stats.edge_density, 4),
+            "sampled": stats.sampled,
+            "interpreted": False,
+        }
+        if compare_with:
+            try:
+                other = read_png(Path(compare_with))
+            except (PngError, OSError):
+                return None
+            try:
+                out["motion"] = difference(image, other).as_dict()
+            except ValueError:
+                out["motion_error"] = (
+                    f"frames differ in size ({image.width}x{image.height} vs "
+                    f"{other.width}x{other.height}) so they were not compared"
+                )
+        return out
 
     def _refusal(self, question: str) -> str:
         """Section 17: refuse sensitive inferences about people, up front."""
