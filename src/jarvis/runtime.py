@@ -331,6 +331,15 @@ def build_runtime(
 
         pipeline = ResearchPipeline(knowledge, fetcher)
 
+    #: A bundled lookup provider, on only when fetching is. It shares the
+    #: SSRF-guarded fetcher, so enabling it adds no new network path. Off by
+    #: default for the same reason the fetcher is: no outbound traffic unless
+    #: the operator asked for it.
+    if search_provider is None and fetcher is not None:
+        from jarvis.research.providers import PyPILookup
+
+        search_provider = PyPILookup(fetcher)
+
     registry = AgentRegistry()
     registry.register(
         ResearchAgent(knowledge=knowledge, provider=search_provider, pipeline=pipeline)
