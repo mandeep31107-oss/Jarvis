@@ -14,6 +14,8 @@ jarvis "summarise the EU rules on selling digital services"
 jarvis revenue "websites for local clinics"
 jarvis read <url> [what it supports]   # fetch, verify, store (needs JARVIS_FETCH=on)
 jarvis dashboard --port 8642   # 14-section dashboard, read-only by default
+jarvis rush --minutes 25       # plan what fits, say what does not
+jarvis loop --interval 2       # always-active mode (PAUSE/STOP apply on the next tick)
 jarvis lock                 # emergency stop - persists across restarts
 jarvis resume               # clear it
 jarvis                      # interactive REPL
@@ -68,6 +70,26 @@ There are **zero runtime dependencies**. The core runs on the standard library a
 
 Every ⚠️ and ❌ above raises `CapabilityUnavailable` or returns an explicit "not implemented"
 outcome. Nothing fabricates a result.
+
+---
+
+## Rush mode and always-active
+
+`jarvis rush --minutes 25` plans the next 25 minutes. It reorders work; it never
+bypasses anything. A HIGH or CRITICAL task goes into a separate **needs you**
+bucket even when it has the highest priority and the nearest deadline, because
+the fastest thing Jarvis can do with a task that needs approval is not to do it
+unapproved. Nothing is ever cancelled — deferred work stays queued, and the plan
+says what was deferred.
+
+Reminders live in memory rather than the task queue, and each CLI call is a fresh
+process, so rush mode reads them in as *planning-only* items: planned and
+reported, never silently turned into runnable work.
+
+`jarvis loop` runs always-active mode. Every tick checks the stop flag first,
+before doing anything, and the check is not cached. `stop()` sets the flag and
+joins the thread, so it returns only once the loop has actually ended. An
+emergency stop prevents the loop from working at all.
 
 ---
 
@@ -171,7 +193,7 @@ that it may run.
 ## Verification
 
 ```bash
-python -m pytest tests/ -q        # 522 tests
+python -m pytest tests/ -q        # 577 tests
 ruff check src tests              # clean
 ```
 

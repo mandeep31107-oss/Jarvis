@@ -64,6 +64,10 @@ class Runtime:
     lessons: LessonLog
     jurisdictions: JurisdictionKnowledge = field(default_factory=JurisdictionKnowledge)
     terms: TermsRegistry = field(default_factory=TermsRegistry)
+    #: An AlwaysActiveLoop, if the operator turned always-active mode on.
+    #: Typed as Any to avoid a circular import; loop.py imports Runtime.
+    loop: Any = None
+
     #: Set by emergency_stop(), cleared by resume(). New work is refused while it
     #: is set, so "stop" means stop and not merely "finish what is running".
     #: Persisted to disk: a stop that a new process forgets is not a stop.
@@ -187,6 +191,7 @@ class Runtime:
             "phase": PHASE,
             "phase_name": PHASE_NAME,
             "run_state": self.run_state,
+            "loop": self.loop.state.as_dict() if self.loop is not None else {"enabled": False},
             "settings": self.settings.redacted_view(),
             "agents": self.registry.describe(),
             "policy": self.policy.describe(),
@@ -283,6 +288,7 @@ def build_runtime(
     model_router: ModelRouter | None = None,
     host: HostAdapter | None = None,
     fetcher: Any = None,
+    always_active: bool | None = None,
 ) -> Runtime:
     """Construct a fully wired runtime.
 
@@ -364,6 +370,15 @@ def build_runtime(
         jurisdictions=jurisdictions,
         terms=terms,
     )
+    # Always-active mode. Constructed but NOT started: turning it on is an
+    # explicit act by the operator, not a side effect of building a runtime.
+    if always_active is None:
+        always_active = settings.always_active
+    if always_active:
+        from jarvis.core.loop import AlwaysActiveLoop
+
+        runtime.loop = AlwaysActiveLoop(runtime)
+
     # Restore the safety state a previous process left behind, before the first
     # audit record, so the startup entry reflects the state Jarvis is really in.
     runtime._load_state()

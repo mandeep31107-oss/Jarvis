@@ -26,7 +26,7 @@ Built ahead of schedule because later phases assume them: risk engine, policy en
 generator A–E, compliance knowledge layer, platform terms engine, revenue pipeline, document
 writers, sandboxed code execution, web scaffolding, multilingual detection.
 
-**Verification:** 522 tests, `ruff check` clean, CLI smoke-tested end to end.
+**Verification:** 577 tests, `ruff check` clean, CLI smoke-tested end to end.
 
 ---
 
@@ -121,10 +121,14 @@ the output with the real `python-pptx`, not only with our own validator.
 
 ---
 
-## Phase 8 — Always-active operation
+## Phase 8 — Always-active operation ✅ **core complete**
 
-- Background loop honouring `PAUSE` / `STOP` at every iteration
-- Rush-mode priority re-evaluation
+- ✅ Background loop honouring `PAUSE` / `STOP` at every iteration, with a
+  heartbeat, audited start/stop, and a `stop()` that joins the thread
+- ✅ Rush-mode priority re-evaluation (`core/rush.py`): plans at most three
+  tasks, defers rather than cancels, and never accelerates work that needs
+  approval
+- Remaining: startup with the OS is instructions only, not an installer
 - Startup with the OS — `autostart_instructions()` already returns per-platform steps and is
   gated HIGH; installing a startup entry stays an action the user approves
 - Windows Task Scheduler, Linux systemd user unit, Android/Termux `boot`
@@ -177,6 +181,6 @@ Phase 4  ██░░░░░░░░░░░░░░░░░░  consent +
 Phase 5  █░░░░░░░░░░░░░░░░░░░  xdg-open only
 Phase 6  ██░░░░░░░░░░░░░░░░░░  analysis done, no execution
 Phase 7  ████████████████████  complete (14 sections, read-only)
-Phase 8  █░░░░░░░░░░░░░░░░░░░  loop + autostart text only
+Phase 8  ████████████████░░░░  loop + rush mode done; OS autostart is text only
 Phase 9  ░░░░░░░░░░░░░░░░░░░░  not started
 ```

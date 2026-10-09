@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -140,7 +141,8 @@ class Repl:
             "pause": self.cmd_pause, "resume": self.cmd_resume, "stop": self.cmd_stop,
             "build": self.cmd_build, "doc": self.cmd_doc, "consent": self.cmd_consent,
             "autostart": self.cmd_autostart, "activity": self.cmd_activity,
-            "config": self.cmd_config, "read": self.cmd_read,
+            "config": self.cmd_config, "read": self.cmd_read, "loop": self.cmd_loop,
+            "rush": self.cmd_rush,
             "quit": lambda _a: False, "exit": lambda _a: False,
         }
         handler = handlers.get(name)
@@ -370,6 +372,49 @@ Anything without a slash is treated as a normal request.
         )
         _render_execution(execution)
 
+    def cmd_rush(self, arg: str) -> None:
+        """/rush [minutes] - plan what fits, and say what does not."""
+        from jarvis.core.rush import apply_rush, plan_rush, reminders_from_memory
+
+        try:
+            minutes = float(arg.strip() or 30)
+        except ValueError:
+            _print("usage: /rush [minutes]")
+            return
+        plan = plan_rush(
+            self.runtime.tasks,
+            budget_minutes=minutes,
+            extra_items=reminders_from_memory(self.runtime.memory),
+        )
+        _print(plan.render())
+        applied = apply_rush(self.runtime.tasks, plan)
+        if applied["now"] or applied["deferred"]:
+            _print(
+                f"\nqueue reordered: {applied['now']} promoted, "
+                f"{applied['deferred']} deprioritised. Nothing was cancelled."
+            )
+
+    def cmd_loop(self, arg: str) -> None:
+        """Always-active mode on/off/status."""
+        from jarvis.core.loop import AlwaysActiveLoop
+
+        verb = arg.strip().lower()
+        loop = self.runtime.loop
+        if verb in ("on", "start", "enable"):
+            if loop is None:
+                loop = AlwaysActiveLoop(self.runtime)
+                self.runtime.loop = loop
+            _print(loop.start())
+        elif verb in ("off", "stop", "disable"):
+            _print(loop.stop() if loop is not None else "Always-active mode is not running.")
+        else:
+            if loop is None:
+                _print("always-active: not configured")
+            else:
+                for key, value in loop.state.as_dict().items():
+                    _print(f"  {key:<18} {value}")
+                _print("usage: /loop on | /loop off")
+
     def cmd_read(self, arg: str) -> None:
         """Fetch a source, report honestly what came back, store what passes.
 
@@ -486,6 +531,44 @@ def _cmd_check_secret(_runtime: Runtime, args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_rush(runtime: Runtime, args: argparse.Namespace) -> int:
+    from jarvis.core.rush import apply_rush, plan_rush, reminders_from_memory
+
+    plan = plan_rush(
+        runtime.tasks,
+        budget_minutes=args.minutes,
+        extra_items=reminders_from_memory(runtime.memory),
+    )
+    _print(plan.render())
+    if args.json:
+        _print(json.dumps(plan.as_dict(), indent=2, default=str))
+    if args.apply:
+        applied = apply_rush(runtime.tasks, plan)
+        _print(f"\nqueue reordered: {applied['now']} promoted, {applied['deferred']} deprioritised.")
+        _print("Nothing was cancelled.")
+    return 0
+
+
+def _cmd_loop(runtime: Runtime, args: argparse.Namespace) -> int:
+    from jarvis.core.loop import AlwaysActiveLoop
+
+    loop = runtime.loop or AlwaysActiveLoop(runtime, interval_s=args.interval)
+    runtime.loop = loop
+    _print(loop.start())
+    _print("STOP with Ctrl-C. PAUSE/STOP from another session also apply.")
+    try:
+        if args.seconds > 0:
+            time.sleep(args.seconds)
+        else:
+            while True:
+                time.sleep(0.5)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        _print(loop.stop())
+    return 0
+
+
 def _cmd_dashboard(runtime: Runtime, args: argparse.Namespace) -> int:
     from jarvis.dashboard import serve
 
@@ -575,6 +658,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="print configuration (the default for this subcommand)",
     )
 
+    p = sub.add_parser("rush", help="plan the next N minutes of work")
+    p.add_argument("--minutes", type=float, default=30.0)
+    p.add_argument("--apply", action="store_true",
+                   help="reorder the queue to match the plan (nothing is cancelled)")
+
+    p = sub.add_parser("loop", help="run always-active mode in the foreground")
+    p.add_argument("--interval", type=float, default=2.0, help="seconds between ticks")
+    p.add_argument("--for", dest="seconds", type=float, default=0.0,
+                   help="stop after N seconds (0 = run until interrupted)")
+
     p = sub.add_parser("dashboard", help="serve the 14-section dashboard")
     p.add_argument("--host", default="127.0.0.1", help="bind address")
     p.add_argument("--port", type=int, default=8642)
@@ -603,7 +696,7 @@ def build_parser() -> argparse.ArgumentParser:
 _SUBCOMMANDS = frozenset(
     {
         "run", "status", "audit", "revenue", "config", "check-secret",
-        "resume", "lock", "read", "dashboard", "repl", "help",
+        "resume", "lock", "read", "dashboard", "loop", "rush", "repl", "help",
     }
 )
 
@@ -650,6 +743,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "resume": _cmd_resume,
         "read": _cmd_read,
         "dashboard": _cmd_dashboard,
+        "loop": _cmd_loop,
+        "rush": _cmd_rush,
         "lock": _cmd_lock,
         "repl": _cmd_repl,
     }
