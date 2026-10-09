@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jarvis-agent"
+version = "0.1.0"
+description = "Jarvis - an autonomous personal, research, revenue and development agent with a hard safety/legal/policy core."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Jarvis contributors" }]
+keywords = ["agent", "assistant", "automation", "compliance", "revenue"]
+
+# The CORE runtime is intentionally dependency-free (stdlib only) so that Jarvis
+# can boot, reason about risk, keep memory and an audit trail, and generate
+# documents on any machine with nothing but Python. Everything that needs a
+# third-party package is an optional extra, wired behind an adapter so that a
+# missing extra degrades gracefully instead of breaking the agent.
+dependencies = []
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn[standard]>=0.27"]
+docs = ["openpyxl>=3.1", "python-pptx>=0.6.23"]
+voice = ["faster-whisper>=1.0", "sounddevice>=0.4.6"]
+vision = ["opencv-python-headless>=4.9"]
+db = ["psycopg[binary]>=3.1", "redis>=5.0", "pgvector>=0.2"]
+dev = ["pytest>=8.0", "pypdf>=4.0", "ruff>=0.4"]
+
+[project.scripts]
+jarvis = "jarvis.interaction.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+jarvis = ["compliance/data/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["error::DeprecationWarning:jarvis.*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]

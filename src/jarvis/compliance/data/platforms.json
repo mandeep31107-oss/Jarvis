@@ -1,0 +1,278 @@
+{
+  "generated": "2026-10-09",
+  "disclaimer": "Platform policies change frequently and differ by region and account type. Nothing here is a substitute for reading the current terms of the specific product you intend to use. Every entry is flagged for re-verification.",
+  "verify_every": true,
+  "activities": {
+    "send_message": "Send an individual message on the user's behalf",
+    "bulk_messaging": "Send messages to many recipients programmatically",
+    "ui_automation": "Drive the platform's own website or desktop app through its UI",
+    "scrape_public": "Collect publicly visible data from the platform",
+    "api_automation": "Automate using the platform's official, documented API",
+    "post_content": "Publish content to an account the user controls",
+    "create_account": "Create a new account programmatically",
+    "affiliate": "Include affiliate or referral links",
+    "payments": "Move money through the platform"
+  },
+  "platforms": [
+    {
+      "id": "whatsapp",
+      "name": "WhatsApp / WhatsApp Business Platform",
+      "category": "messaging",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "WhatsApp Business Platform (Cloud API) with an approved business number and pre-approved message templates",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "WhatsApp Business Terms of Service",
+      "source_url": "https://www.whatsapp.com/legal/business-terms",
+      "activities": {
+        "send_message": {"allowed": "conditional", "reason": "Permitted through the Business Platform for business-initiated conversations only with the approved template and messaging-tier system."},
+        "bulk_messaging": {"allowed": "conditional", "reason": "Marketing messages require an opted-in audience, approved templates and are subject to per-user rate and marketing limits. Unofficial bulk senders get numbers banned."},
+        "ui_automation": {"allowed": false, "reason": "Automating WhatsApp Web or the mobile app with unofficial libraries breaches the terms and reliably gets the number banned."},
+        "scrape_public": {"allowed": false, "reason": "Collecting user data (numbers, profiles, status) without permission breaches the terms and privacy law."},
+        "api_automation": {"allowed": "conditional", "reason": "The official Business Platform API is the sanctioned route."},
+        "create_account": {"allowed": false, "reason": "Automated account creation is prohibited and triggers verification systems that must not be bypassed."}
+      },
+      "risk_notes": [
+        "Unofficial automation is the single most common way people lose a phone number they need for daily life.",
+        "Marketing to people who did not opt in also raises anti-spam law exposure (CAN-SPAM, PECR, Spam Act 2003)."
+      ]
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "category": "video",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "YouTube Data API v3 within its quota and API Services Terms",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "YouTube Terms of Service / API Services Terms",
+      "source_url": "https://www.youtube.com/t/terms",
+      "activities": {
+        "post_content": {"allowed": "conditional", "reason": "Uploads via the Data API are permitted; content must comply with Community Guidelines and copyright rules."},
+        "scrape_public": {"allowed": false, "reason": "Accessing content by automated means other than through public search engines or the official API is prohibited by the terms."},
+        "ui_automation": {"allowed": false, "reason": "Automating the site UI to inflate views, likes or subscribers is a terms breach and an integrity violation."},
+        "api_automation": {"allowed": "conditional", "reason": "Allowed within quota, with audit and compliance obligations under the API Services Terms."},
+        "affiliate": {"allowed": "conditional", "reason": "Affiliate links are allowed but must not be deceptive; undisclosed paid promotion is an FTC and platform issue."}
+      },
+      "risk_notes": [
+        "Monetisation is contingent on the YouTube Partner Program and advertiser-friendly guidelines.",
+        "Automated engagement inflation is treated as invalid traffic and can terminate the channel."
+      ]
+    },
+    {
+      "id": "instagram",
+      "name": "Instagram",
+      "category": "social",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "Instagram Graph API / Basic Display through a Meta developer app",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Instagram Platform Policy",
+      "source_url": "https://developers.facebook.com/docs/instagram-platform/instagram-platform-policy",
+      "activities": {
+        "post_content": {"allowed": "conditional", "reason": "Publishing through the Graph API for business/creator accounts is supported."},
+        "ui_automation": {"allowed": false, "reason": "Automated following, liking, commenting or DMs are explicitly prohibited and lead to account restriction."},
+        "scrape_public": {"allowed": false, "reason": "Collecting data without permission breaches the terms; automated access to private data is prohibited outright."},
+        "create_account": {"allowed": false, "reason": "Automated account creation is prohibited."},
+        "api_automation": {"allowed": "conditional", "reason": "Permitted only for approved use cases within the developer platform review process."}
+      },
+      "risk_notes": [
+        "Third-party 'growth' tools that automate engagement are the fastest route to a permanently disabled account.",
+        "Influencer-style posts require clear paid-partnership disclosure."
+      ]
+    },
+    {
+      "id": "telegram",
+      "name": "Telegram",
+      "category": "messaging",
+      "automation_allowed": "yes",
+      "sanctioned_channel": "Telegram Bot API (first-class, documented, free)",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Telegram Bot API documentation",
+      "source_url": "https://core.telegram.org/bots/api",
+      "activities": {
+        "send_message": {"allowed": true, "reason": "Bots may message users who have started them; this is the intended use."},
+        "api_automation": {"allowed": true, "reason": "The Bot API is the officially supported automation surface, with documented rate limits."},
+        "bulk_messaging": {"allowed": "conditional", "reason": "Only to users who initiated contact with the bot, and within the documented rate limits. Unsolicited broadcast is spam."},
+        "scrape_public": {"allowed": "conditional", "reason": "Reading public channels via the documented MTProto API is possible, but republishing content still raises copyright issues."}
+      },
+      "risk_notes": [
+        "Rate limits are explicit and enforced; respect them rather than working around them.",
+        "A bot must be disclosed as a bot - it must not impersonate a person."
+      ]
+    },
+    {
+      "id": "google",
+      "name": "Google services (Search, Workspace, Cloud)",
+      "category": "platform",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "Google Cloud APIs, Google Workspace APIs and the Custom Search JSON API",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Google Terms of Service",
+      "source_url": "https://policies.google.com/terms",
+      "activities": {
+        "scrape_public": {"allowed": false, "reason": "The terms prohibit circumventing technical measures and accessing services by automated means outside the provided APIs."},
+        "api_automation": {"allowed": "conditional", "reason": "Official APIs are the sanctioned route and carry their own quotas and acceptable-use terms."},
+        "ui_automation": {"allowed": false, "reason": "Automating signed-in Google product UIs risks account suspension."}
+      },
+      "risk_notes": [
+        "Use the Custom Search JSON API or another provider for search instead of scraping the results page.",
+        "Workspace automation should go through the Admin SDK / Gmail API with proper OAuth scopes."
+      ]
+    },
+    {
+      "id": "microsoft",
+      "name": "Microsoft services (M365, Edge, Azure)",
+      "category": "platform",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "Microsoft Graph API and Azure SDKs with appropriate app permissions",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Microsoft Services Agreement",
+      "source_url": "https://www.microsoft.com/servicesagreement",
+      "activities": {
+        "api_automation": {"allowed": "conditional", "reason": "Graph is the supported path for mail, calendar, files and Teams."},
+        "ui_automation": {"allowed": "conditional", "reason": "Driving locally installed Office apps on the user's own machine for their own documents is ordinary use; automating a signed-in web service against its terms is not."},
+        "scrape_public": {"allowed": false, "reason": "Automated access outside provided interfaces is not permitted."}
+      },
+      "risk_notes": [
+        "Prefer Graph with least-privilege delegated permissions over screen-scraping a web UI.",
+        "Excel/PPTX/Word files the user owns can be generated locally without touching any service."
+      ]
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "category": "payments",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "Stripe API with the account holder's own keys, test mode first",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Stripe Services Agreement and Restricted Businesses",
+      "source_url": "https://stripe.com/legal/ssa",
+      "activities": {
+        "payments": {"allowed": "conditional", "reason": "Permitted for the account holder's own business. The restricted-businesses list must be checked before onboarding."},
+        "api_automation": {"allowed": true, "reason": "The API is the intended interface; use test keys during development."}
+      },
+      "risk_notes": [
+        "Keys must live in a secret store, never in source control.",
+        "Chargebacks and prohibited-use findings can freeze funds; keep clear records of what was sold."
+      ]
+    },
+    {
+      "id": "paypal",
+      "name": "PayPal",
+      "category": "payments",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "PayPal REST APIs / Braintree",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "PayPal Acceptable Use Policy",
+      "source_url": "https://www.paypal.com/us/legalhub/acceptable-use",
+      "activities": {
+        "payments": {"allowed": "conditional", "reason": "Permitted within the Acceptable Use Policy; some product categories are prohibited outright."},
+        "api_automation": {"allowed": true, "reason": "REST APIs are the sanctioned interface."}
+      },
+      "risk_notes": [
+        "Buyer-protection disputes are decided by PayPal; keep delivery evidence.",
+        "High-risk categories face account limitation without warning."
+      ]
+    },
+    {
+      "id": "upwork",
+      "name": "Upwork",
+      "category": "freelance",
+      "automation_allowed": "no",
+      "sanctioned_channel": "The platform UI, used by a human. A limited API exists for reporting.",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Upwork Terms of Service",
+      "source_url": "https://www.upwork.com/legal/terms-of-service/",
+      "activities": {
+        "ui_automation": {"allowed": false, "reason": "Automated bidding or messaging breaches the terms and gets accounts permanently suspended."},
+        "create_account": {"allowed": false, "reason": "Multiple or automated accounts are prohibited."},
+        "payments": {"allowed": "conditional", "reason": "Payment must stay on-platform; taking a client off-platform to avoid fees is a terms breach."}
+      },
+      "risk_notes": [
+        "Proposal quality, not volume, is what converts - automated spray-and-pray also violates the terms.",
+        "Off-platform payment circumvention is one of the fastest ways to lose an account with escrowed funds."
+      ]
+    },
+    {
+      "id": "fiverr",
+      "name": "Fiverr",
+      "category": "freelance",
+      "automation_allowed": "no",
+      "sanctioned_channel": "The platform UI, used by a human",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Fiverr Terms of Service",
+      "source_url": "https://www.fiverr.com/terms-of-service",
+      "activities": {
+        "ui_automation": {"allowed": false, "reason": "Automated activity and fake reviews breach the terms."},
+        "payments": {"allowed": "conditional", "reason": "Payment must remain on-platform."}
+      },
+      "risk_notes": ["Review manipulation is treated as fraud and can void escrowed earnings."]
+    },
+    {
+      "id": "amazon",
+      "name": "Amazon (Seller Central / Associates)",
+      "category": "ecommerce",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "Selling Partner API (SP-API) and the Associates programme tools",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "Amazon Services Business Solutions Agreement",
+      "source_url": "https://sellercentral.amazon.com/help/hub/reference/G1791",
+      "activities": {
+        "api_automation": {"allowed": "conditional", "reason": "SP-API is the sanctioned route, with its own data-protection policy and rate limits."},
+        "scrape_public": {"allowed": false, "reason": "Scraping product pages breaches the conditions of use."},
+        "affiliate": {"allowed": "conditional", "reason": "Associates links are allowed but the account is closed for incentivised clicks or self-referrals."}
+      },
+      "risk_notes": [
+        "Review manipulation is aggressively policed and results in listing removal.",
+        "SP-API access requires an approved developer profile and PII handling commitments."
+      ]
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "category": "social",
+      "automation_allowed": "no",
+      "sanctioned_channel": "Official LinkedIn APIs (restricted partner programme) only",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "LinkedIn User Agreement",
+      "source_url": "https://www.linkedin.com/legal/user-agreement",
+      "activities": {
+        "ui_automation": {"allowed": false, "reason": "The user agreement prohibits bots and other automated methods of accessing the service."},
+        "scrape_public": {"allowed": false, "reason": "Public-data scraping is both a terms breach and legally contested; courts have reached different conclusions in different cases."}
+      },
+      "risk_notes": [
+        "Automation tools that use your own session are a well-known cause of permanent restriction.",
+        "Manual, personalised outreach is both compliant and more effective."
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI platform (example model provider)",
+      "category": "ai_provider",
+      "automation_allowed": "conditional",
+      "sanctioned_channel": "The API, used within the usage policies and rate limits",
+      "confidence": "medium",
+      "last_verified": null,
+      "source_title": "OpenAI Usage Policies",
+      "source_url": "https://openai.com/policies/usage-policies",
+      "activities": {
+        "api_automation": {"allowed": "conditional", "reason": "Permitted within the usage policies: no illegal activity, no deception, no adult content without safeguards, no tailored legal/medical advice without human review."},
+        "bulk_messaging": {"allowed": "conditional", "reason": "Generating bulk unsolicited content or deceptive personas is prohibited."}
+      },
+      "risk_notes": [
+        "Disclose AI involvement where it is materially relevant.",
+        "Rate limits are contractual; working around them with rotating keys is a terms breach."
+      ]
+    }
+  ]
+}
