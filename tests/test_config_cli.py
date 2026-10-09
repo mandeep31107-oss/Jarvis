@@ -104,10 +104,22 @@ def test_cli_status_runs(capsys, tmp_path, monkeypatch):
 
 
 def test_cli_status_json_is_machine_readable(capsys, tmp_path, monkeypatch):
+    """Assert the shape, not a hardcoded phase number.
+
+    Pinning `phase == 1` made this test fail for the right reason (the build
+    moved on) but for no useful purpose. Checking that the reported phase agrees
+    with the single source of truth catches a real regression instead.
+    """
+    from jarvis.version import PHASE, PHASE_NAME, __version__
+
     monkeypatch.setenv("JARVIS_HOME", str(tmp_path / "h"))
     cli.main(["--json", "status"])
     payload = json.loads(capsys.readouterr().out)
-    assert payload["phase"] == 1
+    assert payload["phase"] == PHASE
+    assert payload["phase_name"] == PHASE_NAME
+    assert payload["version"] == __version__
+    for key in ("agents", "policy", "models", "memory", "audit", "run_state"):
+        assert key in payload, f"status JSON is missing {key!r}"
 
 
 def test_cli_run_returns_zero_for_a_handled_request(tmp_path, monkeypatch):

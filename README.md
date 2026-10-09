@@ -3,9 +3,9 @@
 An autonomous personal agent that does useful work — research, analysis, documents, code,
 compliance review, and revenue evaluation — under an explicit risk and permission model.
 
-**Current state: Phase 1 of 9.** The core runtime is implemented and tested. Voice, camera
-control, and browser automation are interface-shaped stubs that refuse honestly rather than
-pretend to work. See [ROADMAP.md](ROADMAP.md) for what exists and what does not.
+**Current state: Phase 2 of 9.** The core runtime and live research are implemented and tested.
+Voice, camera control, and browser automation are interface-shaped stubs that refuse honestly
+rather than pretend to work. See [ROADMAP.md](ROADMAP.md) for what exists and what does not.
 
 ```
 pip install -e .

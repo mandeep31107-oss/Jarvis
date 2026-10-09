@@ -1,6 +1,6 @@
 # Architecture
 
-Phase 1 of 9. This document describes what is built and **why it is shaped this way**, so that
+Phase 2 of 9. This document describes what is built and **why it is shaped this way**, so that
 later phases can be added without weakening the gates.
 
 ---
