@@ -243,10 +243,84 @@ class RevenueAgent(Agent):
         *,
         jurisdictions: JurisdictionKnowledge | None = None,
         terms: TermsRegistry | None = None,
+        executor: Any = None,
+        monitor: Any = None,
     ) -> None:
         super().__init__(runtime)
         self.jurisdictions = jurisdictions or JurisdictionKnowledge()
         self.terms = terms or TermsRegistry()
+        #: Injected rather than constructed here: the executor holds no authority
+        #: of its own and must share the runtime's policy engine and audit log.
+        self.executor = executor
+        self.monitor = monitor
+
+    # --------------------------------------------------------------- execution
+    def plan_from_assessment(self, assessment: OpportunityAssessment) -> Any:
+        """Turn an assessment into a concrete, gated list of steps.
+
+        Requirements become steps. Those involving money, accounts, identity or
+        terms of service are marked as needing a person, because automating them
+        would either fail or breach the platform's rules.
+        """
+        from jarvis.revenue.execution import ExecutionPlan, Step
+
+        plan = ExecutionPlan(
+            title=f"Launch: {assessment.opportunity.title}",
+            opportunity=assessment.opportunity.title,
+        )
+        #: Verbs that need a human being, mapped from the requirement text.
+        human_markers = {
+            "payment": "payment.collect",
+            "bank": "bank.connect",
+            "account": "account.create",
+            "identity": "identity.verify",
+            "kyc": "identity.verify",
+            "tax": "tax.file",
+            "contract": "contract.sign",
+            "terms": "terms.accept",
+        }
+        for requirement in self.requirements(assessment.opportunity):
+            low = requirement.lower()
+            verb = next((v for marker, v in human_markers.items() if marker in low), "task.prepare")
+            plan.add(
+                Step(
+                    verb=verb,
+                    title=requirement,
+                    risk=RiskLevel.HIGH if verb != "task.prepare" else RiskLevel.MEDIUM,
+                    irreversible=verb in {"payment.collect", "tax.file", "contract.sign"},
+                )
+            )
+        return plan
+
+    def monitor_rules(self, assessment: OpportunityAssessment) -> list[Any]:
+        """Thresholds worth watching for this opportunity.
+
+        Derived from the model's own numbers rather than invented defaults, so
+        the alert means something: the break-even point is where the plan stops
+        working, not an arbitrary figure.
+        """
+        from jarvis.revenue.execution import MonitorRule
+
+        rules = [
+            MonitorRule(
+                name="Acquisition cost above the modelled break-even",
+                metric="cac",
+                threshold=max(1.0, assessment.opportunity.price_per_unit * 0.5),
+                direction="above",
+                advice="Pause paid acquisition; the model assumed a cheaper customer.",
+            ),
+        ]
+        if assessment.break_even_month is not None:
+            rules.append(
+                MonitorRule(
+                    name=f"No break-even by month {assessment.break_even_month}",
+                    metric="months_elapsed",
+                    threshold=float(assessment.break_even_month),
+                    direction="above",
+                    advice="Re-run the analysis; the projection has not held.",
+                )
+            )
+        return rules
 
     # ------------------------------------------------------------------ entry
     def run(self, request: AgentRequest) -> AgentResult:

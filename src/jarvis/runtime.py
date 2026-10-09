@@ -344,8 +344,22 @@ def build_runtime(
     registry.register(
         ResearchAgent(knowledge=knowledge, provider=search_provider, pipeline=pipeline)
     )
+    #: Revenue execution. The executor is given this runtime's policy engine and
+    #: audit log rather than building its own, so an approved plan is gated by the
+    #: same rules as everything else and every step lands in the same trail.
+    from jarvis.revenue.execution import Executor, Monitor
+
+    revenue_executor = Executor(
+        policy, audit, ledger=settings.home / "revenue_ledger.json"
+    )
+    revenue_monitor = Monitor(audit=audit)
     registry.register(
-        RevenueAgent(jurisdictions=jurisdictions, terms=terms)
+        RevenueAgent(
+            jurisdictions=jurisdictions,
+            terms=terms,
+            executor=revenue_executor,
+            monitor=revenue_monitor,
+        )
     )
     registry.register(
         ComplianceAgent(
