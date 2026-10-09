@@ -62,6 +62,9 @@ class AppInfo:
     running: bool
     launch_command: str | None = None
     notes: str = ""
+    #: Set when the entry came from the process table rather than a launcher
+    #: list, so a caller can tell "installed" from "running right now".
+    pid: int | None = None
 
 
 @dataclass
@@ -69,6 +72,25 @@ class ActionOutcome:
     ok: bool
     message: str
     data: dict[str, Any] = field(default_factory=dict)
+
+
+def _missing_display_reason() -> str:
+    """Why screen access is impossible, when it is.
+
+    A headless host has no display server to read from. Reporting the specific
+    absence beats a generic "unavailable", because it tells the user what to fix
+    and makes it clear this is an environment fact rather than a policy choice.
+    """
+    import os as _os
+
+    if _os.environ.get("DISPLAY") or _os.environ.get("WAYLAND_DISPLAY"):
+        return ""
+    if Path("/tmp/.X11-unix").is_dir() and any(Path("/tmp/.X11-unix").glob("X*")):
+        return ""
+    return (
+        "no display server is attached to this session "
+        "(neither DISPLAY nor WAYLAND_DISPLAY is set)"
+    )
 
 
 class HostAdapter:
@@ -113,15 +135,25 @@ class HostAdapter:
             "autostart",
         ):
             supported = name in self.supported
+            #: When screen or input control is impossible for an environmental
+            #: reason, say which one. "not implemented" leaves the user unable to
+            #: tell whether Jarvis is refusing or simply has nothing to look at.
+            display_gap = _missing_display_reason() if name in {
+                "ui_control", "keyboard_shortcuts", "screenshot"
+            } else ""
+            if not supported and display_gap:
+                reason = f"needs a display server; {display_gap}"
+            elif supported and not self.computer_use_enabled:
+                reason = "supported by this platform but computer use is disabled in settings"
+            elif supported:
+                reason = ""
+            else:
+                reason = f"not implemented for {self.platform}"
             out.append(
                 Capability(
                     name=name,
                     available=supported and self.computer_use_enabled,
-                    reason=(
-                        "supported by this platform but computer use is disabled in settings"
-                        if supported and not self.computer_use_enabled
-                        else "" if supported else f"not implemented for {self.platform}"
-                    ),
+                    reason=reason,
                     needs_consent=name in {"camera", "microphone", "screen", "screenshot", "lock_device"},
                     os_permission={
                         "camera": "Camera permission for your terminal/host app",
@@ -147,9 +179,20 @@ class HostAdapter:
         }:
             raise ConsentRequired("Privacy mode is on; capture is disabled.")
         if not self.has(capability):
+            #: Reuse the same explanation the capability list gives, so the
+            #: error and the dashboard never disagree about why.
+            reason = next(
+                (c.reason for c in self.capabilities() if c.name == capability), ""
+            )
+            #: Both branches start with a separator - concatenating without one
+            #: produced "not available on linuxneeds a display server".
+            detail = (
+                f" - {reason}" if reason
+                else "" if self.computer_use_enabled
+                else " - computer use is disabled in settings"
+            )
             raise CapabilityUnavailable(
-                f"'{capability}' is not available on {self.platform}"
-                + ("" if self.computer_use_enabled else " (computer use is disabled in settings)")
+                f"'{capability}' is not available on {self.platform}{detail}"
             )
 
     def _require_consent(self, device: Device) -> None:
@@ -159,6 +202,28 @@ class HostAdapter:
                 "Consent is revocable at any time - Jarvis never enables a capture device on "
                 "its own."
             )
+
+    # --- processes -----------------------------------------------------------
+    def list_processes(self, *, include_kernel_threads: bool = False) -> list[Any]:
+        """What is actually running, read from the OS process table.
+
+        Available even when computer use is disabled: knowing what is running is
+        observation, not control. Controlling anything still goes through the
+        policy engine.
+        """
+        from jarvis.host.procfs import proc_available
+
+        if not proc_available():
+            return []
+        from jarvis.host.procfs import list_processes
+
+        return list_processes(include_kernel_threads=include_kernel_threads)
+
+    def find_process(self, needle: str) -> list[Any]:
+        """Processes matching a name, case-insensitively."""
+        from jarvis.host.procfs import find
+
+        return find(needle)
 
     # --- applications --------------------------------------------------------
     def list_apps(self) -> list[AppInfo]:
@@ -189,6 +254,11 @@ class HostAdapter:
     def screenshot(self) -> ActionOutcome:
         self._require("screenshot")
         self._require_consent(Device.SCREEN)
+        missing = _missing_display_reason()
+        if missing:
+            #: Names the actual missing piece. "not implemented" would leave the
+            #: user guessing whether Jarvis refuses or simply cannot see.
+            return ActionOutcome(False, f"Screenshot capture is unavailable: {missing}")
         return ActionOutcome(False, "Screenshot capture is not implemented here")
 
     # --- capture -------------------------------------------------------------
@@ -289,7 +359,13 @@ class PosixHost(HostAdapter):
 
     def list_apps(self) -> list[AppInfo]:
         self._require("list_apps")
+        #: What is actually running right now, from /proc. Previously this was
+        #: hardcoded to False, which made the field a lie rather than an absence.
+        from jarvis.host.procfs import find as find_processes
+        from jarvis.host.procfs import proc_available
+
         apps: list[AppInfo] = []
+        seen: set[str] = set()
         for directory in ("/usr/share/applications", "/usr/local/share/applications",
                           str(Path.home() / ".local/share/applications")):
             folder = Path(directory)
@@ -297,7 +373,32 @@ class PosixHost(HostAdapter):
                 continue
             for desktop in sorted(folder.glob("*.desktop")):
                 name = desktop.stem
-                apps.append(AppInfo(name=name, running=False, launch_command=f"gtk-launch {name}"))
+                if name in seen:
+                    continue
+                seen.add(name)
+                running = bool(proc_available() and find_processes(name, exact_name=True))
+                apps.append(AppInfo(name=name, running=running, launch_command=f"gtk-launch {name}"))
+
+        #: Merge in what is actually running. On a host with no desktop entries
+        #: the process table is the only useful answer, and on a host that has
+        #: them a running process that is not installed as an app is still worth
+        #: reporting - otherwise `running` is only ever true for launchers.
+        if proc_available():
+            from jarvis.host.procfs import list_processes
+
+            #: Keyed by PID, not by name: many processes legitimately share a
+            #: name, and deduping on the name would silently drop all but the
+            #: first - including the one the user asked about.
+            listed_pids = {a.pid for a in apps if a.pid is not None}
+            for info in list_processes():
+                if info.pid in listed_pids:
+                    continue
+                label = Path(info.executable).name or info.name
+                if not label:
+                    continue
+                apps.append(
+                    AppInfo(name=label, running=True, launch_command=label, pid=info.pid)
+                )
         return apps
 
     def open_app(self, name: str) -> ActionOutcome:

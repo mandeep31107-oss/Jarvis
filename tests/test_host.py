@@ -63,10 +63,19 @@ def test_capability_listing_explains_why_something_is_off(locked_down):
 
 
 def test_unsupported_capabilities_say_so():
+    """The reason must explain *why*, whichever reason applies.
+
+    It used to always be "not implemented". A host with no display server now
+    gets the more useful answer, so this asserts the intent - that the reason is
+    a real explanation - rather than one particular wording.
+    """
     host = AndroidHost(computer_use_enabled=True)
     caps = {c.name: c for c in host.capabilities()}
+
     assert caps["ui_control"].available is False
-    assert "not implemented" in caps["ui_control"].reason
+    reason = caps["ui_control"].reason
+    assert reason.strip(), "an unavailable capability must not have an empty reason"
+    assert "not implemented" in reason or "display server" in reason
 
 
 def test_enabled_host_can_discover_applications(enabled):
