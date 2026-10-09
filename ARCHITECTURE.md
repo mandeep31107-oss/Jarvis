@@ -240,10 +240,42 @@ Spec section 14's three examples all route correctly:
 
 ---
 
+## Research
+
+`research/` is three modules with one job each:
+
+- `fetch.py` — `HttpFetcher` and `FileFetcher`. Guards: SSRF (every resolved
+  address checked against `ipaddress.is_global`), scheme allowlist, optional host
+  allowlist, `robots.txt`, per-host rate limiting, size/timeout/redirect caps,
+  content-type allowlist, and an identifying User-Agent. A 401/403/407/451 is
+  reported as `access_denied` and never retried another way.
+- `extract.py` — stdlib `HTMLParser` text extraction. Scripts, styles and
+  navigation are dropped; `<title>` needs an explicit exception because it lives
+  inside the otherwise-skipped `<head>`.
+- `pipeline.py` — `fetch → extract → assess authority → ingest`, producing a
+  `RetrievalRecord` with one of five outcomes: `stored`, `rejected`, `refused`,
+  `thin`, or an access denial.
+
+Fetching is **off by default** (`JARVIS_FETCH`). Network access is a capability
+the operator grants, not a convenience that is assumed.
+
+Two decisions worth knowing:
+
+- **Authority is never inflated.** The default is `UNVERIFIED`, and the knowledge
+  base's `authority_check` gate rejects it. Promotion happens only on evidence —
+  an official domain suffix, or the operator's own trusted list — and the reason
+  is stored alongside the score.
+- **A document the user hands over is vouched for by the user**, recorded as
+  `official_secondary` with that reason spelled out. This applies only to
+  `file://` sources. Fetching a page over the network does not make anyone vouch
+  for it.
+
+---
+
 ## What is deliberately not here
 
-- No web scraping. `research` returns a structured "I cannot do this" until a search provider
-  is wired up in Phase 2.
+- No general web search. `research` reads a URL you give it, but it cannot go
+  looking. A search provider is still Phase 2 work.
 - No audio backend. The voice *session* model (interruption, suspend, resume, history) is real
   and tested; nothing produces or consumes sound.
 - No browser or GUI automation. `xdg-open` on Linux is the only working OS action.

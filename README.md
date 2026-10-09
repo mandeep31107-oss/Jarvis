@@ -12,6 +12,7 @@ pip install -e .
 jarvis status
 jarvis "summarise the EU rules on selling digital services"
 jarvis revenue "websites for local clinics"
+jarvis read <url> [what it supports]   # fetch, verify, store (needs JARVIS_FETCH=on)
 jarvis lock                 # emergency stop - persists across restarts
 jarvis resume               # clear it
 jarvis                      # interactive REPL
@@ -60,12 +61,35 @@ There are **zero runtime dependencies**. The core runs on the standard library a
 | Voice (STT / TTS / interruption) | ⚠️ **stub** | session model + interruption semantics work; **no audio backend** |
 | Vision / camera | ⚠️ **stub** | consent + privacy-mode gates work; **no capture backend** |
 | Computer control | ⚠️ **stub** | Linux `xdg-open` only; no keyboard/mouse control |
-| Web scraping / live research | ❌ **not built** | returns a structured "I cannot do this" |
+| Live research: fetch a URL, verify, store | ✅ working | robots-respecting, SSRF-guarded, opt-in |
 | Dashboard UI | ❌ **not built** | Phase 7 |
 | PPTX | ❌ **not built** | behind the `docs` extra |
 
 Every ⚠️ and ❌ above raises `CapabilityUnavailable` or returns an explicit "not implemented"
 outcome. Nothing fabricates a result.
+
+---
+
+## Reading a source
+
+`jarvis read <url>` fetches a page and reports one of five outcomes — `stored`,
+`rejected`, `refused`, `thin`, or an access denial — rather than pretending it
+read something it did not:
+
+```
+$ JARVIS_FETCH=on jarvis read https://example.eu/dsa "the DSA applies from 17 Feb 2024"
+[research] Read https://example.eu/dsa: stored
+  - the DSA applies from 17 Feb 2024 (confidence: medium, time-sensitive)
+  next:
+    * Authority primary: europa.eu is an official government domain for EU
+```
+
+The fetcher refuses internal and link-local addresses (including the cloud
+metadata endpoint), honours `robots.txt`, treats a 403 as final rather than
+something to route around, caps response size and redirects, and identifies
+itself in the User-Agent. Nothing enters the knowledge base without passing all
+eight gates. Authority is never inflated: the default is `unverified`, which the
+gate rejects.
 
 ---
 
@@ -104,6 +128,7 @@ JARVIS_HOME=~/.jarvis          # where memory, audit log and documents live
 JARVIS_AUTONOMY=auto           # auto | ask | review
 JARVIS_JURISDICTION=IN         # IN US CA UK EU AU SG UAE JP KR
 JARVIS_LANGUAGE_POLICY=match   # match | en | hi | hinglish
+JARVIS_FETCH=off               # set to 'on' to let Jarvis retrieve URLs
 JARVIS_COMPUTER_USE=off        # set to 'on' to permit OS control at all
 JARVIS_CAPTURE_DEVICES=        # comma-separated: camera, mic, screen
 JARVIS_ALWAYS_ACTIVE=off       # background loop (Phase 9)
@@ -145,7 +170,7 @@ that it may run.
 ## Verification
 
 ```bash
-python -m pytest tests/ -q        # 456 tests
+python -m pytest tests/ -q        # 522 tests
 ruff check src tests              # clean
 ```
 

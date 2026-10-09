@@ -8,6 +8,7 @@ point of the anti-hallucination layer.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -48,7 +49,7 @@ class FunctionSearch:
         return list(self._fn(query, limit))
 
 
-class ResearchAgent(Agent):
+class ResearchAgent(Agent):  # noqa: PLR0912
     name = "research"
     description = "Researches a question, verifies sources and reports confidence honestly."
     capabilities = ("research", "verify", "summarise")
@@ -59,15 +60,33 @@ class ResearchAgent(Agent):
         *,
         knowledge: KnowledgeBase | None = None,
         provider: SearchProvider | None = None,
+        pipeline: Any = None,
     ) -> None:
         super().__init__(runtime)
         self.knowledge = knowledge
         self.provider = provider
+        #: A ResearchPipeline (Phase 2). Without one, the agent can only repeat
+        #: what is already stored - and it says so rather than implying it
+        #: fetched something.
+        self.pipeline = pipeline
+
+    #: Schemes the agent will accept as "here is a source".
+    _URL_RE = re.compile(r"""\b((?:https?|file)://[^\s<>"')]+)""", re.IGNORECASE)
 
     def run(self, request: AgentRequest) -> AgentResult:
         query = request.text or request.param("query") or ""
         if not query.strip():
             return AgentResult(agent=self.name, ok=False, summary="No research question supplied.")
+
+        # A URL in the request means "read this", which is a different job from
+        # "answer this question". Do the reading first and report what happened.
+        url = (request.param("url") or "").strip()
+        if not url:
+            match = self._URL_RE.search(query)
+            if match and request.param("mode") != "query":
+                url = match.group(1)
+        if url:
+            return self._ingest(request, url, query)
 
         result = AgentResult(agent=self.name, summary=f"Research on: {query}")
         result.say(f"checking the knowledge base for '{query}'")
@@ -122,6 +141,10 @@ class ResearchAgent(Agent):
                     else "The search returned nothing usable."
                 )
             )
+            if self.pipeline is None:
+                result.follow_ups.append(
+                    "No fetcher is configured, so Jarvis cannot read a URL you give it either."
+                )
             result.add_claim(Claim.unknown(f"Answer to '{query}'", why="no verified source available"))
             result.follow_ups.extend(
                 [
@@ -141,7 +164,74 @@ class ResearchAgent(Agent):
             )
         return result
 
-    # ------------------------------------------------------------------ ingest
+    def _ingest(self, request: AgentRequest, url: str, query: str) -> AgentResult:
+        """Read a URL the user pointed at, and report honestly what came of it."""
+        if self.pipeline is None:
+            result = AgentResult(
+                agent=self.name,
+                ok=False,
+                summary=(
+                    f"You gave me {url}, but no fetcher is configured, so Jarvis has not "
+                    "read it. It will not describe a page it has not retrieved."
+                ),
+            )
+            result.add_claim(Claim.unknown(f"Contents of {url}", why="no fetcher configured"))
+            result.follow_ups.append("Configure a fetcher to enable reading sources.")
+            return result
+
+        statement = (request.param("statement") or "").strip() or query.strip()
+        statement = self._URL_RE.sub("", statement).strip() or f"Information from {url}"
+        record = self.pipeline.ingest_url(
+            url,
+            statement=statement,
+            topic=request.param("topic") or "",
+            jurisdiction=request.param("jurisdiction") or "",
+        )
+        result = AgentResult(agent=self.name, summary=f"Read {url}: {record.outcome}")
+        result.data = record.as_dict()
+        if record.ok:
+            result.add_claim(
+                Claim(
+                    statement=statement,
+                    confidence=Confidence.MEDIUM,
+                    sources=[
+                        Source(
+                            title=record.extracted.title or url,
+                            url=url,
+                            authority=record.authority,
+                            publisher=record.extracted.publisher if record.extracted else "",
+                            retrieved=record.retrieved_at,
+                        )
+                    ],
+                    time_sensitive=True,
+                    last_verified=record.retrieved_at,
+                    reasoning=record.authority_reason,
+                )
+            )
+            result.follow_ups.append(
+                f"Authority {record.authority.value}: {record.authority_reason}"
+            )
+        else:
+            result.ok = False
+            result.add_claim(
+                Claim.unknown(
+                    f"Contents of {url}",
+                    why=record.note or f"the retrieval {record.outcome}",
+                )
+            )
+            if record.fetch.access_denied:
+                result.follow_ups.append(
+                    "The site restricted access. Jarvis will not retrieve it another way."
+                )
+            elif record.fetch.robots_disallowed:
+                result.follow_ups.append("robots.txt disallows this path; that was honoured.")
+            elif record.outcome == "thin":
+                result.follow_ups.append(
+                    "Try a page with more substantive text, or supply the document directly."
+                )
+            else:
+                result.follow_ups.append(record.note)
+        return result
     def record_source(
         self,
         statement: str,

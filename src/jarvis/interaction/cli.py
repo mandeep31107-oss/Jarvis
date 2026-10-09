@@ -140,7 +140,7 @@ class Repl:
             "pause": self.cmd_pause, "resume": self.cmd_resume, "stop": self.cmd_stop,
             "build": self.cmd_build, "doc": self.cmd_doc, "consent": self.cmd_consent,
             "autostart": self.cmd_autostart, "activity": self.cmd_activity,
-            "config": self.cmd_config,
+            "config": self.cmd_config, "read": self.cmd_read,
             "quit": lambda _a: False, "exit": lambda _a: False,
         }
         handler = handlers.get(name)
@@ -370,6 +370,25 @@ Anything without a slash is treated as a normal request.
         )
         _render_execution(execution)
 
+    def cmd_read(self, arg: str) -> None:
+        """Fetch a source, report honestly what came back, store what passes.
+
+        The first token is the locator and is passed explicitly. Detecting it
+        from the sentence instead would silently miss anything without a scheme
+        - a bare filename handed to a FileFetcher, for instance - and the agent
+        would then answer the question rather than read the source.
+        """
+        bits = arg.split(maxsplit=1)
+        if not bits:
+            _print("usage: /read <url-or-path> [what it supports]")
+            return
+        url = bits[0]
+        statement = bits[1].strip() if len(bits) > 1 else ""
+        execution = self.runtime.handle(
+            statement or url, intent="research", url=url, statement=statement
+        )
+        _render_execution(execution)
+
     def cmd_config(self, arg: str) -> None:
         """Show the effective configuration with secret values masked.
 
@@ -467,6 +486,17 @@ def _cmd_check_secret(_runtime: Runtime, args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_read(runtime: Runtime, args: argparse.Namespace) -> int:
+    statement = " ".join(args.statement).strip()
+    execution = runtime.handle(
+        statement or args.url, intent="research", url=args.url, statement=statement
+    )
+    _render_execution(execution)
+    if args.json and execution.result is not None:
+        _print(json.dumps(execution.result.data, indent=2, default=str))
+    return 0 if execution.ok else 1
+
+
 def _cmd_lock(runtime: Runtime, _args: argparse.Namespace) -> int:
     """Emergency stop from the command line. Always available, never gated."""
     _print(runtime.emergency_stop())
@@ -525,6 +555,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="print configuration (the default for this subcommand)",
     )
 
+    p = sub.add_parser("read", help="fetch a URL and record it with its source")
+    p.add_argument("url")
+    p.add_argument("statement", nargs="*", help="what the page supports")
+
     sub.add_parser("resume", help="clear an emergency stop and accept work again")
     sub.add_parser("lock", help="emergency stop: halt tasks, kill capture, refuse new work")
 
@@ -541,7 +575,7 @@ def build_parser() -> argparse.ArgumentParser:
 _SUBCOMMANDS = frozenset(
     {
         "run", "status", "audit", "revenue", "config", "check-secret",
-        "resume", "lock", "repl", "help",
+        "resume", "lock", "read", "repl", "help",
     }
 )
 
@@ -586,6 +620,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "check-secret": _cmd_check_secret,
         "config": _cmd_config,
         "resume": _cmd_resume,
+        "read": _cmd_read,
         "lock": _cmd_lock,
         "repl": _cmd_repl,
     }

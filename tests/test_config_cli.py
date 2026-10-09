@@ -307,3 +307,50 @@ def test_check_secret_exits_nonzero_for_a_leak(capsys, tmp_path, monkeypatch):
 def test_check_secret_passes_clean_text(capsys, tmp_path, monkeypatch):
     monkeypatch.setenv("JARVIS_HOME", str(tmp_path / "h"))
     assert cli.main(["check-secret", "a perfectly ordinary sentence"]) == 0
+
+
+def test_read_reports_honestly_when_no_fetcher_is_configured(capsys, tmp_path, monkeypatch):
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path / "h"))
+    monkeypatch.delenv("JARVIS_FETCH", raising=False)
+    assert cli.main(["read", "https://example.eu/dsa"]) == 1
+    out = capsys.readouterr().out
+    assert "has not read it" in out
+    assert "will not describe a page it has not retrieved" in out
+
+
+def test_read_refuses_an_internal_address(capsys, tmp_path, monkeypatch):
+    """The SSRF guard has to hold through the CLI, not just in the fetcher."""
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path / "h"))
+    monkeypatch.setenv("JARVIS_FETCH", "on")
+    assert cli.main(["read", "http://169.254.169.254/latest/meta-data/"]) == 1
+    out = capsys.readouterr().out
+    assert "not a public address" in out
+
+
+def test_read_can_store_a_local_document(capsys, tmp_path, monkeypatch):
+    from jarvis.research.fetch import FileFetcher
+
+    pages = tmp_path / "pages"
+    pages.mkdir()
+    prose = "The rule applies from 1 January 2025 to all providers. " * 6
+    (pages / "rule.html").write_text(
+        f"<html><head><title>Rule</title></head><body><h1>Rule</h1><p>{prose}</p></body></html>",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("JARVIS_HOME", str(tmp_path / "h"))
+
+    from jarvis.config import settings_from_env
+    from jarvis.interaction.cli import Repl
+    from jarvis.runtime import build_runtime
+
+    # Injecting the fetcher is the supported seam - build_runtime wires the
+    # pipeline itself, which is the path a real deployment uses.
+    runtime = build_runtime(
+        settings_from_env(), with_memory=False, fetcher=FileFetcher(pages)
+    )
+    repl = Repl(runtime)
+    repl.command("/read rule.html the rule applies from 1 January 2025")
+    out = capsys.readouterr().out
+    assert "stored" in out, out
+    assert "official_secondary" in out
+    runtime.shutdown()

@@ -173,8 +173,23 @@ class IngestReport:
         }
 
 
+#: Schemes accepted as a source locator. ``file:`` is included because a
+#: document the user hands over is a legitimate source and the user can check
+#: it. ``data:`` and ``javascript:`` are not: neither is retrievable later, so
+#: neither can be verified, and neither should be recorded as a source.
+_SOURCE_SCHEMES = ("http://", "https://", "file:///")
+
+
 def _looks_like_url(value: str) -> bool:
-    return bool(re.match(r"^https?://[^\s]+$", value or ""))
+    """True when ``value`` is an absolute, checkable locator.
+
+    A bare path such as ``/tmp/page.html`` is rejected: it is not a URI, it says
+    nothing about which machine it refers to, and it cannot be re-checked.
+    """
+    text = (value or "").strip()
+    if "\n" in text or "\r" in text:
+        return False
+    return any(text.startswith(scheme) and len(text) > len(scheme) for scheme in _SOURCE_SCHEMES)
 
 
 class KnowledgeBase:

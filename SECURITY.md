@@ -98,6 +98,34 @@ project whose tests never ran.
 
 ---
 
+## Network access
+
+Off by default (`JARVIS_FETCH=off`). Turning it on lets Jarvis retrieve a URL —
+and a URL is untrusted input: it can come from the user, from a page Jarvis
+already read, or from a model. Every guard below exists because of that.
+
+| Guard | Behaviour |
+|---|---|
+| SSRF | Every **resolved** address is checked with `ipaddress.is_global`. Loopback, RFC1918, link-local, `::1` and the `169.254.169.254` metadata endpoint are refused. Checking the resolved address matters: a public hostname with a DNS record pointing at `127.0.0.1` is the attack. |
+| Schemes | Only `http` and `https`. `file://` goes through `FileFetcher`, which is confined to a root directory. |
+| robots.txt | Parsed and honoured per host. A disallowed path is reported, not fetched another way. An unreadable robots.txt is treated as absent, not as permission. |
+| Access control | `401/403/407/451` set `access_denied` and are final. No header shuffling, no mirror hunting, no paywall removal. |
+| Rate limiting | A minimum interval per host, enforced locally. |
+| Resource caps | Response size, timeout and redirect depth are bounded. |
+| Content type | Non-text responses are not extracted. |
+| Identification | The User-Agent names the tool and can carry a contact address. Jarvis does not pose as a browser. |
+
+There is no cookie jar, no credential forwarding, no cache busting and no
+JavaScript execution.
+
+**What this does not defend against:** a page whose *text* contains instructions
+for the agent. Prompt injection through fetched content is not modelled as a
+threat yet — fetched text is stored as data with a source and a confidence, and
+is never executed, but nothing currently distinguishes "the page says X" from
+"the page tells Jarvis to do Y". Treat that as an open risk.
+
+---
+
 ## Privacy
 
 ### Camera and microphone

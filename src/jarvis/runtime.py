@@ -282,6 +282,7 @@ def build_runtime(
     search_provider: Any = None,
     model_router: ModelRouter | None = None,
     host: HostAdapter | None = None,
+    fetcher: Any = None,
 ) -> Runtime:
     """Construct a fully wired runtime.
 
@@ -311,8 +312,23 @@ def build_runtime(
     jurisdictions = JurisdictionKnowledge()
     terms = TermsRegistry()
 
+    # Phase 2: live research. A fetcher is only created when the operator has
+    # switched it on; otherwise the agent keeps saying honestly that it cannot
+    # read a page, which is better than pretending it did.
+    pipeline = None
+    if fetcher is None and settings.fetch_enabled:
+        from jarvis.research.fetch import HttpFetcher
+
+        fetcher = HttpFetcher()
+    if fetcher is not None:
+        from jarvis.research.pipeline import ResearchPipeline
+
+        pipeline = ResearchPipeline(knowledge, fetcher)
+
     registry = AgentRegistry()
-    registry.register(ResearchAgent(knowledge=knowledge, provider=search_provider))
+    registry.register(
+        ResearchAgent(knowledge=knowledge, provider=search_provider, pipeline=pipeline)
+    )
     registry.register(
         RevenueAgent(jurisdictions=jurisdictions, terms=terms)
     )

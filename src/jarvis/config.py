@@ -82,6 +82,9 @@ class Settings:
     computer_use: bool = False
     capture_devices: tuple[str, ...] = ()
     always_active: bool = False
+    #: Phase 2: may Jarvis retrieve URLs at all? Off by default - network access
+    #: is a capability the operator grants, not a convenience that is assumed.
+    fetch_enabled: bool = False
     database_url: str | None = None
     redis_url: str | None = None
     model_provider: str = "auto"
@@ -136,6 +139,7 @@ class Settings:
             "computer_use": self.computer_use,
             "capture_devices": list(self.capture_devices),
             "always_active": self.always_active,
+            "fetch_enabled": self.fetch_enabled,
             "database_url": "***" if self.database_url else None,
             "redis_url": "***" if self.redis_url else None,
             "model_provider": self.model_provider,
@@ -199,6 +203,7 @@ def settings_from_env(env: Mapping[str, str] | None = None, *, dotenv: str | Pat
         computer_use=_as_bool(source.get("JARVIS_COMPUTER_USE")),
         capture_devices=devices,
         always_active=_as_bool(source.get("JARVIS_ALWAYS_ACTIVE")),
+        fetch_enabled=_as_bool(source.get("JARVIS_FETCH")),
         database_url=source.get("JARVIS_DATABASE_URL") or None,
         redis_url=source.get("JARVIS_REDIS_URL") or None,
         model_provider=(source.get("JARVIS_MODEL_PROVIDER") or "auto").strip().lower(),
