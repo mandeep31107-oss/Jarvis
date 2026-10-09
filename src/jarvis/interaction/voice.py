@@ -191,6 +191,56 @@ class VoiceSession:
             previous_task_title=title,
         )
 
+    # --- audio-driven barge-in -----------------------------------------------
+    def detect_barge_in(
+        self,
+        audio: bytes,
+        *,
+        sample_rate: int = 16000,
+        playing_since: float = 0.0,
+    ) -> dict[str, Any]:
+        """Decide whether the user talked over Jarvis, from the audio itself.
+
+        This is the part that used to be assumed rather than done: something has
+        to look at the samples and say whether a voice is present. The detector
+        is the stdlib VAD in :mod:`jarvis.voice.vad`, so it runs with no
+        microphone and no model, and its numbers are reported rather than hidden.
+
+        ``playing_since`` is the offset at which Jarvis started speaking. Speech
+        before that point is the user's original request and is not an
+        interruption - counting it would make Jarvis interrupt itself.
+        """
+        import array
+
+        from jarvis.voice.audio import AudioError, PcmAudio
+        from jarvis.voice.vad import barge_in, detect_utterances
+
+        samples = array.array("h")
+        try:
+            samples.frombytes(audio[: len(audio) - len(audio) % 2])
+        except ValueError as exc:
+            return {"interrupted": False, "reason": f"audio could not be read: {exc}"}
+        if not samples:
+            return {"interrupted": False, "reason": "the audio was empty"}
+
+        try:
+            recording = PcmAudio(sample_rate, 1, samples)
+            spans = detect_utterances(recording)
+            moment = barge_in(recording, playing_since=playing_since)
+        except AudioError as exc:
+            return {"interrupted": False, "reason": str(exc)}
+
+        return {
+            "interrupted": moment is not None,
+            "at": moment,
+            "speech_started_before_playback": any(
+                span.start < playing_since for span in spans
+            ),
+            "utterances": [span.as_dict() for span in spans],
+            #: Recorded so the decision can be audited rather than trusted.
+            "state": self.state.value,
+        }
+
     # --- resume --------------------------------------------------------------
     def resume_previous(self) -> dict[str, Any]:
         """Restore the interrupted task and continue from its checkpoint."""
@@ -225,6 +275,10 @@ class VoiceSession:
             "last_language": self.history[-1].language if self.history else None,
             "stt": getattr(self.stt, "name", "unknown"),
             "tts": getattr(self.tts, "name", "unknown"),
+            #: Voice activity detection is stdlib, so it is always available even
+            #: when no STT or TTS backend is configured. Saying so avoids the
+            #: impression that "no audio backend" means "cannot hear".
+            "vad": "builtin",
         }
 
     def idle(self) -> None:
