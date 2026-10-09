@@ -13,6 +13,7 @@ jarvis status
 jarvis "summarise the EU rules on selling digital services"
 jarvis revenue "websites for local clinics"
 jarvis read <url> [what it supports]   # fetch, verify, store (needs JARVIS_FETCH=on)
+jarvis dashboard --port 8642   # 14-section dashboard, read-only by default
 jarvis lock                 # emergency stop - persists across restarts
 jarvis resume               # clear it
 jarvis                      # interactive REPL
@@ -52,7 +53,7 @@ There are **zero runtime dependencies**. The core runs on the standard library a
 | Compliance knowledge layer | ✅ working | 10 jurisdictions, confidence + source + age |
 | Platform terms engine | ✅ working | 13 platforms, STOPs on conflict *and* on unknown |
 | Revenue pipeline | ✅ working | 10 stages, scam screening, expected value |
-| Documents: XLSX, DOCX, PDF, CSV, Markdown | ✅ working | written from scratch, validated on read-back |
+| Documents: XLSX, DOCX, **PPTX**, PDF, CSV, Markdown | ✅ working | written from scratch, validated on read-back |
 | Coding: review + sandboxed execution | ✅ working | `ast` review, subprocess sandbox, rlimits |
 | Website/app scaffolding | ✅ working | plan → scaffold → validate |
 | Model router | ✅ working | offline by default; cloud models need a provider |
@@ -62,8 +63,8 @@ There are **zero runtime dependencies**. The core runs on the standard library a
 | Vision / camera | ⚠️ **stub** | consent + privacy-mode gates work; **no capture backend** |
 | Computer control | ⚠️ **stub** | Linux `xdg-open` only; no keyboard/mouse control |
 | Live research: fetch a URL, verify, store | ✅ working | robots-respecting, SSRF-guarded, opt-in |
-| Dashboard UI | ❌ **not built** | Phase 7 |
-| PPTX | ❌ **not built** | behind the `docs` extra |
+| Dashboard: 14 sections, local web UI | ✅ working | read-only by default |
+
 
 Every ⚠️ and ❌ above raises `CapabilityUnavailable` or returns an explicit "not implemented"
 outcome. Nothing fabricates a result.

@@ -486,6 +486,26 @@ def _cmd_check_secret(_runtime: Runtime, args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_dashboard(runtime: Runtime, args: argparse.Namespace) -> int:
+    from jarvis.dashboard import serve
+
+    server = serve(
+        runtime, host=args.host, port=args.port, allow_actions=args.allow_actions
+    )
+    bound = server.server_address
+    _print(f"Jarvis dashboard on http://{bound[0]}:{bound[1]}/")
+    _print(f"run state: {runtime.run_state}   read-only: {not args.allow_actions}")
+    _print("Ctrl-C to stop.")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        _print("\nstopped.")
+    finally:
+        server.shutdown()
+        server.server_close()
+    return 0
+
+
 def _cmd_read(runtime: Runtime, args: argparse.Namespace) -> int:
     statement = " ".join(args.statement).strip()
     execution = runtime.handle(
@@ -555,6 +575,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="print configuration (the default for this subcommand)",
     )
 
+    p = sub.add_parser("dashboard", help="serve the 14-section dashboard")
+    p.add_argument("--host", default="127.0.0.1", help="bind address")
+    p.add_argument("--port", type=int, default=8642)
+    p.add_argument(
+        "--allow-actions", action="store_true",
+        help="let the dashboard send requests (they still go through the policy engine)",
+    )
+
     p = sub.add_parser("read", help="fetch a URL and record it with its source")
     p.add_argument("url")
     p.add_argument("statement", nargs="*", help="what the page supports")
@@ -575,7 +603,7 @@ def build_parser() -> argparse.ArgumentParser:
 _SUBCOMMANDS = frozenset(
     {
         "run", "status", "audit", "revenue", "config", "check-secret",
-        "resume", "lock", "read", "repl", "help",
+        "resume", "lock", "read", "dashboard", "repl", "help",
     }
 )
 
@@ -621,6 +649,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "config": _cmd_config,
         "resume": _cmd_resume,
         "read": _cmd_read,
+        "dashboard": _cmd_dashboard,
         "lock": _cmd_lock,
         "repl": _cmd_repl,
     }

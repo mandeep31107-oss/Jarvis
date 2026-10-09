@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import zipfile
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -273,3 +274,99 @@ def test_split_ref_parses_cell_references():
     assert _split_ref("AA10") == (10, 27)
     with pytest.raises(ValueError):
         _split_ref("nonsense")
+
+
+# ----------------------------------------------------------------------- pptx
+def test_pptx_writes_a_valid_package(tmp_path):
+    from jarvis.documents.pptx import PptxPresentation
+
+    deck = PptxPresentation("Q3 Review")
+    deck.add_slide("Q3 Review", ["Revenue up 12%", "Churn down to 3.1%"])
+    deck.add_slide("Risks", ["Concentration in two accounts"])
+    deck.add_slide("Next steps")
+    path = deck.write(tmp_path / "deck.pptx")
+
+    assert deck.validate(path)["ok"]
+    with zipfile.ZipFile(path) as zf:
+        assert zf.testzip() is None
+        for part in ("ppt/slideMasters/slideMaster1.xml", "ppt/slideLayouts/slideLayout1.xml",
+                     "ppt/theme/theme1.xml", "ppt/slides/slide1.xml"):
+            assert part in zf.namelist(), part
+            ET.fromstring(zf.read(part))
+
+
+def test_pptx_survives_a_third_party_reader(tmp_path):
+    """Open it with the real library, not only with our own validator.
+
+    Our validator and our writer share assumptions, so passing it proves less
+    than it looks like. python-pptx has no reason to accept a malformed deck.
+    """
+    pptx = pytest.importorskip("pptx")
+    from jarvis.documents.pptx import PptxPresentation
+
+    deck = PptxPresentation("Q3 Review")
+    deck.add_slide("Q3 Review", ["Revenue up 12%", "Churn down to 3.1%"])
+    deck.add_slide("Risks", ["Concentration in two accounts"])
+    path = deck.write(tmp_path / "deck.pptx")
+
+    opened = pptx.Presentation(str(path))
+    assert len(opened.slides) == 2
+    first = [s.text_frame.text for s in opened.slides[0].shapes if s.has_text_frame]
+    assert first[0] == "Q3 Review"
+    assert "Revenue up 12%" in first[1]
+
+
+def test_pptx_escapes_markup_in_text(tmp_path):
+    from jarvis.documents.pptx import PptxPresentation
+
+    deck = PptxPresentation("A & B <tag>")
+    deck.add_slide("A & B <tag>", ["Use <script> & \"quotes\""])
+    path = deck.write(tmp_path / "esc.pptx")
+    assert deck.validate(path)["ok"]
+    with zipfile.ZipFile(path) as zf:
+        body = zf.read("ppt/slides/slide1.xml").decode()
+    assert "<script>" not in body
+    assert "&lt;script&gt;" in body
+
+
+def test_an_empty_deck_still_produces_a_title_slide(tmp_path):
+    from jarvis.documents.pptx import PptxPresentation
+
+    deck = PptxPresentation("Empty")
+    path = deck.write(tmp_path / "empty.pptx")
+    assert deck.validate(path)["ok"]
+
+
+def test_a_request_for_a_presentation_is_not_answered_with_a_spreadsheet(tmp_path):
+    """Regression: 'make me a powerpoint presentation' produced an .xlsx, because
+    DOC_FORMATS had no pptx entry and the match fell through to the default.
+    A silently wrong artifact is worse than an error."""
+    from jarvis.agents.documents import DocumentAgent
+    from jarvis.interaction.intents import parse_intent
+
+    request = parse_intent("make me a powerpoint presentation")
+    assert request.params["format"] == "pptx"
+
+    path, problems = DocumentAgent(output_dir=tmp_path).build(
+        "pptx", tmp_path / "deck.pptx", title="Board update", bullets=["One", "Two"]
+    )
+    assert not problems, problems
+    assert path.suffix == ".pptx"
+    with zipfile.ZipFile(path) as zf:
+        assert "ppt/presentation.xml" in zf.namelist()
+
+
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("make me a powerpoint presentation", "pptx"),
+        ("build a slide deck for the board", "pptx"),
+        ("give me an excel sheet", "xlsx"),
+        ("write a word document", "docx"),
+        ("make a pdf report", "pdf"),
+    ],
+)
+def test_the_requested_format_is_the_format_produced(text, expected):
+    from jarvis.interaction.intents import parse_intent
+
+    assert parse_intent(text).params["format"] == expected

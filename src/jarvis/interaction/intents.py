@@ -34,7 +34,8 @@ INTENT_RULES: list[tuple[str, tuple[str, ...]]] = [
     # keywords are format names, or a noun plus a document verb. A format name
     # like "pdf" is safe; a bare noun like "invoice" is not.
     ("document", ("/doc", "/document", "excel", "spreadsheet", "xlsx", "csv file",
-                  "powerpoint", "presentation", "word document", "pdf file", "pdf report",
+                  "powerpoint", "presentation", "slide deck", "slide-deck", "deck of slides",
+                  "word document", "pdf file", "pdf report",
                   "pdf", "make a pdf", "create a pdf", "expense sheet", "report file",
                   "invoice template", "invoice document", "create an invoice",
                   "generate an invoice", "generate invoice", "markdown", "readme")),
@@ -77,7 +78,11 @@ SITE_CATEGORIES = {
     "ai_app": ("ai app", "chatbot", "ai application"),
 }
 
+#: Order matters: this is scanned in order and the first match wins. "pptx"
+#: comes first so a request for a presentation is not swallowed by a later
+#: entry - "make me a powerpoint presentation" used to produce a spreadsheet.
 DOC_FORMATS = {
+    "pptx": ("powerpoint", "pptx", "presentation", "slide deck", "slide-deck", "slides"),
     "xlsx": ("excel", "spreadsheet", "xlsx", "workbook"),
     "csv": ("csv",),
     "docx": ("word", "docx", "document file"),

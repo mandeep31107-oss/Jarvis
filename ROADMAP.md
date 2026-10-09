@@ -104,13 +104,20 @@ stops.
 
 ---
 
-## Phase 7 — Dashboard
+## Phase 7 — Dashboard ✅ **complete**
 
-Spec section 29's 14 sections, as a local web UI.
+Spec section 29's 14 sections, as a local web UI. Shipped.
 
-- Live status, task queue, audit trail, memory browser, revenue pipeline, compliance coverage
-- Read-only by default; any action button routes through the same policy engine
-- Bound to localhost, no remote access without explicit configuration
+- `jarvis dashboard --port 8642` serves `/`, `/api/status`, `/api/health`
+- Read-only by default: `POST /api/request` returns 403 unless `--allow-actions`
+  is passed, and even then the request goes through the runtime, so the risk and
+  policy engines still decide
+- Security headers on every response (`X-Frame-Options: DENY`,
+  `Content-Security-Policy: default-src 'self'`, `nosniff`, `no-referrer`)
+- No external assets: the page is one self-contained document
+
+Also shipped: the PPTX writer, completing the document set. Verified by opening
+the output with the real `python-pptx`, not only with our own validator.
 
 ---
 
@@ -169,7 +176,7 @@ Phase 3  ██░░░░░░░░░░░░░░░░░░  session m
 Phase 4  ██░░░░░░░░░░░░░░░░░░  consent + privacy gates done, no capture backend
 Phase 5  █░░░░░░░░░░░░░░░░░░░  xdg-open only
 Phase 6  ██░░░░░░░░░░░░░░░░░░  analysis done, no execution
-Phase 7  ░░░░░░░░░░░░░░░░░░░░  not started
+Phase 7  ████████████████████  complete (14 sections, read-only)
 Phase 8  █░░░░░░░░░░░░░░░░░░░  loop + autostart text only
 Phase 9  ░░░░░░░░░░░░░░░░░░░░  not started
 ```

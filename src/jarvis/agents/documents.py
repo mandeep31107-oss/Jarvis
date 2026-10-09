@@ -22,13 +22,16 @@ from jarvis.documents import (
 )
 from jarvis.documents.xlsx import S_NUMBER, S_PERCENT
 
-SUPPORTED = ("xlsx", "csv", "docx", "pdf", "md")
+SUPPORTED = ("xlsx", "csv", "docx", "pdf", "md", "pptx")
 
 
 class DocumentAgent(Agent):
     name = "documents"
     description = "Creates Excel, CSV, Word, PDF and Markdown documents and validates them."
-    capabilities = ("document", "xlsx", "csv", "docx", "pdf", "markdown", "report")
+    capabilities = (
+        "document", "xlsx", "csv", "docx", "pdf", "markdown", "pptx",
+        "presentation", "report",
+    )
 
     def __init__(self, runtime: Any = None, *, output_dir: str | Path | None = None) -> None:
         super().__init__(runtime)
@@ -154,6 +157,22 @@ class DocumentAgent(Agent):
             doc.footer_note()
             path = doc.save(destination)
             return path, list(doc.validate(path).get("problems", []))
+
+        if fmt == "pptx":
+            from jarvis.documents.pptx import PptxPresentation
+
+            deck = PptxPresentation(title)
+            # Title slide carries the bullets; every supplied section becomes
+            # its own slide, which is what a deck is for.
+            deck.add_slide(title, list(bullets) or [p for p in paragraphs][:6])
+            for section in sections:
+                deck.add_slide(
+                    str(section.get("name", "")),
+                    [str(x) for x in section.get("bullets", [])]
+                    or [str(x) for x in section.get("paragraphs", [])],
+                )
+            path = deck.write(destination)
+            return path, list(deck.validate(path).get("problems", []))
 
         if fmt == "pdf":
             pdf = PdfDocument(title)

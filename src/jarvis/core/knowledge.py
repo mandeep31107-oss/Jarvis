@@ -458,12 +458,14 @@ class KnowledgeBase:
             args.append(status_value)
         sql += " ORDER BY created_at DESC LIMIT ?"
         args.append(limit)
-        return [self._row(r) for r in self._conn.execute(sql, args).fetchall()]
+        with self._lock:
+            return [self._row(r) for r in self._conn.execute(sql, args).fetchall()]
 
     def needs_revalidation(self, *, days: int = 180) -> list[KnowledgeItem]:
-        rows = self._conn.execute(
-            "SELECT * FROM knowledge WHERE status='trusted'"
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM knowledge WHERE status='trusted'"
+            ).fetchall()
         out = []
         for r in rows:
             item = self._row(r)
@@ -477,9 +479,10 @@ class KnowledgeBase:
             self._conn.execute("UPDATE knowledge SET status='stale' WHERE id=?", (item_id,))
 
     def stats(self) -> dict[str, Any]:
-        rows = self._conn.execute(
-            "SELECT status, COUNT(*) AS n FROM knowledge GROUP BY status"
-        ).fetchall()
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT status, COUNT(*) AS n FROM knowledge GROUP BY status"
+            ).fetchall()
         return {row["status"]: row["n"] for row in rows}
 
     def render(self, items: Sequence[KnowledgeItem] | None = None, limit: int = 15) -> str:

@@ -77,10 +77,19 @@ def read_jsonl(path: str | Path) -> Iterator[dict[str, Any]]:
 
 
 def connect_sqlite(path: str | Path) -> sqlite3.Connection:
-    """Open a SQLite database tuned for a single-user desktop agent."""
+    """Open a SQLite database tuned for a single-user desktop agent.
+
+    ``check_same_thread=False`` because memory and knowledge are reached from
+    more than one thread: the task manager runs a thread pool, and the dashboard
+    serves on worker threads. That flag is only safe because every store
+    serialises access with its own lock - a connection shared without a lock is
+    a race, not a convenience.
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(p), timeout=30.0, isolation_level=None)
+    conn = sqlite3.connect(
+        str(p), timeout=30.0, isolation_level=None, check_same_thread=False
+    )
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA synchronous=NORMAL")
