@@ -1,0 +1,19 @@
+# dependencies & build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# runtime data (databases, uploads, generated exports) — local only
+backend/data/
+
+# env & editor
+.env
+.DS_Store
+.idea/
+.vscode/
