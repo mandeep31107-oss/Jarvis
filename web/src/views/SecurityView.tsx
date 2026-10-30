@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, Field, Notice, Panel, Pill, Spinner, Stat, StatusBadge, Toggle, formatDate } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { relativeTime, useAsync } from '../lib/hooks';
-import type { AuditEntry, Capabilities, UsageSummary, VoiceSettings } from '../lib/types';
+import type { AuditEntry, Capabilities, UsageSummary, User, VoiceSettings } from '../lib/types';
 
 const AUTONOMY: Record<1 | 2 | 3, { title: string; body: string }> = {
   1: {
@@ -20,12 +20,14 @@ const AUTONOMY: Record<1 | 2 | 3, { title: string; body: string }> = {
 };
 
 export default function SecurityView({
+  user,
   capabilities,
   voice,
   autonomy,
   onApplySettings,
   onSettingsReload,
 }: {
+  user: User;
   capabilities: Capabilities | null;
   voice: VoiceSettings;
   autonomy: 1 | 2 | 3;
@@ -38,16 +40,20 @@ export default function SecurityView({
   const [newPassword, setNewPassword] = useState('');
   const [passwordMessage, setPasswordMessage] = useState<{ tone: 'green' | 'red'; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const hasPassword = user.hasPassword !== false;
 
   const changePassword = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setPasswordMessage(null);
     try {
-      await api.post('/auth/change-password', { currentPassword, newPassword });
+      const result = await api.post<{ message: string }>('/auth/change-password', {
+        ...(hasPassword ? { currentPassword } : {}),
+        newPassword,
+      });
       setCurrentPassword('');
       setNewPassword('');
-      setPasswordMessage({ tone: 'green', text: 'Password changed. All other sessions were signed out.' });
+      setPasswordMessage({ tone: 'green', text: result.message });
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Could not change the password';
       setPasswordMessage({ tone: 'red', text: message });
@@ -261,23 +267,66 @@ export default function SecurityView({
           )}
         </Panel>
 
-        <Panel title="Change password" subtitle="Signs out every other session">
+        <Panel title="Account & sign-in" subtitle="How this owner account can be identified">
+          <div className="grid grid--2" style={{ gap: 10 }}>
+            <div className="stat">
+              <span className="stat__label">Email</span>
+              <span className="stat__value" style={{ fontSize: 14 }}>{user.email ?? 'not set'}</span>
+              <span className="stat__hint">
+                {user.email ? (user.emailVerified ? 'verified' : 'not verified by a code yet') : 'sign in with a mobile number'}
+              </span>
+            </div>
+            <div className="stat">
+              <span className="stat__label">Mobile</span>
+              <span className="stat__value" style={{ fontSize: 14 }}>{user.phone ?? 'not linked'}</span>
+              <span className="stat__hint">
+                {user.phone ? (user.phoneVerified ? 'verified' : 'not verified by a code yet') : 'linking a number to an existing account is not built yet'}
+              </span>
+            </div>
+          </div>
+          <div className="row" style={{ marginTop: 10, gap: 8 }}>
+            <Pill tone={hasPassword ? 'green' : 'amber'}>
+              {hasPassword ? 'password sign-in on' : 'password sign-in off'}
+            </Pill>
+            <Pill tone="cyan">one-time codes: email and mobile</Pill>
+          </div>
+          <p className="tiny muted-2" style={{ marginTop: 10 }}>
+            Google one-tap sign-in is not implemented. Password reset by email is not implemented
+            either; use a code, or set a new password here.
+          </p>
+        </Panel>
+
+        <Panel
+          title={hasPassword ? 'Change password' : 'Set a password'}
+          subtitle={hasPassword ? 'Required to sign in without a code' : 'This account was created with a one-time code'}
+        >
           {passwordMessage && (
             <Notice tone={passwordMessage.tone} onDismiss={() => setPasswordMessage(null)}>
               {passwordMessage.text}
             </Notice>
           )}
           <form className="stack" onSubmit={changePassword}>
-            <Field label="Current password">
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
-            </Field>
-            <Field label="New password" hint="At least 10 characters with a letter and a number.">
+            {!hasPassword && (
+              <Notice tone="amber">
+                No password is set on this account yet, so any signed-in session may set one. Set it
+                now to allow password sign-in.
+              </Notice>
+            )}
+            {hasPassword && (
+              <Field label="Current password">
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </Field>
+            )}
+            <Field
+              label={hasPassword ? 'New password' : 'Password'}
+              hint="At least 10 characters with a letter and a number."
+            >
               <input
                 type="password"
                 value={newPassword}
@@ -289,7 +338,7 @@ export default function SecurityView({
             </Field>
             <div className="form-actions">
               <Button type="submit" variant="primary" disabled={busy}>
-                {busy ? 'Updating…' : 'Update password'}
+                {busy ? 'Updating…' : hasPassword ? 'Update password' : 'Set password'}
               </Button>
             </div>
           </form>

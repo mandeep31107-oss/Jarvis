@@ -7,8 +7,51 @@ export const SESSION_COOKIE = 'jarvis_session';
 
 export interface AuthUser {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   name: string;
+  emailVerified: boolean;
+  phoneVerified: boolean;
+  hasPassword: boolean;
+}
+
+export interface UserSecrets extends AuthUser {
+  password_hash: string;
+  password_salt: string;
+}
+
+interface UserRow {
+  id: string;
+  email: string | null;
+  phone: string | null;
+  name: string;
+  email_verified: number;
+  phone_verified: number;
+  has_password: number;
+  password_hash: string;
+  password_salt: string;
+}
+
+/**
+ * Public projection of a user row. It is deliberately built field by field so a
+ * new column can never leak to the browser by accident, and it never includes
+ * the password hash or salt.
+ */
+function toUser(row: UserRow): AuthUser {
+  return {
+    id: row.id,
+    email: row.email,
+    phone: row.phone,
+    name: row.name,
+    emailVerified: row.email_verified === 1,
+    phoneVerified: row.phone_verified === 1,
+    hasPassword: row.has_password === 1,
+  };
+}
+
+/** Server-internal projection: adds the secrets used to verify a password. */
+function toSecrets(row: UserRow): UserSecrets {
+  return { ...toUser(row), password_hash: row.password_hash, password_salt: row.password_salt };
 }
 
 export interface Session {
@@ -97,29 +140,101 @@ export function countUsers(): number {
   return Number(get<{ c: number }>('SELECT COUNT(*) AS c FROM users')?.c ?? 0);
 }
 
-export function findUserByEmail(email: string): AuthUser & { password_hash: string; password_salt: string } | undefined {
-  return get<AuthUser & { password_hash: string; password_salt: string }>(
-    'SELECT id, email, name, password_hash, password_salt FROM users WHERE email = ?',
-    [email.toLowerCase().trim()],
-  );
+const USER_COLUMNS =
+  'id, email, phone, name, email_verified, phone_verified, has_password, password_hash, password_salt';
+
+export function findUserByEmail(email: string): UserSecrets | undefined {
+  const row = get<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE email = ?`, [
+    email.toLowerCase().trim(),
+  ]);
+  return row ? toSecrets(row) : undefined;
+}
+
+export function findUserByPhone(phone: string): UserSecrets | undefined {
+  const row = get<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE phone = ?`, [phone.trim()]);
+  return row ? toSecrets(row) : undefined;
 }
 
 export function findUserById(id: string): AuthUser | undefined {
-  return get<AuthUser>('SELECT id, email, name FROM users WHERE id = ?', [id]);
+  const row = get<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`, [id]);
+  return row ? toUser(row) : undefined;
+}
+
+export function findUserSecretsById(id: string): UserSecrets | undefined {
+  const row = get<UserRow>(`SELECT ${USER_COLUMNS} FROM users WHERE id = ?`, [id]);
+  return row ? toSecrets(row) : undefined;
+}
+
+export function findUserByIdentifier(identifier: {
+  email?: string | null;
+  phone?: string | null;
+}): UserSecrets | undefined {
+  if (identifier.email) return findUserByEmail(identifier.email);
+  if (identifier.phone) return findUserByPhone(identifier.phone);
+  return undefined;
 }
 
 export function createUser(user: {
   id: string;
-  email: string;
+  email?: string | null;
+  phone?: string | null;
   name: string;
   passwordHash: string;
   passwordSalt: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  hasPassword?: boolean;
 }): void {
   run(
-    `INSERT INTO users (id, email, name, password_hash, password_salt, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [user.id, user.email.toLowerCase().trim(), user.name, user.passwordHash, user.passwordSalt, nowIso()],
+    `INSERT INTO users (id, email, phone, name, password_hash, password_salt,
+       email_verified, phone_verified, has_password, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      user.id,
+      user.email ? user.email.toLowerCase().trim() : null,
+      user.phone ? user.phone.trim() : null,
+      user.name,
+      user.passwordHash,
+      user.passwordSalt,
+      user.emailVerified ? 1 : 0,
+      user.phoneVerified ? 1 : 0,
+      user.hasPassword ? 1 : 0,
+      nowIso(),
+    ],
   );
+}
+
+/**
+ * Accounts created through a one-time code still need a password_hash value
+ * because the column is NOT NULL. A random unguessable hash means password
+ * sign-in is simply impossible until the owner sets a real password.
+ */
+export function unusablePassword(): { hash: string; salt: string } {
+  return hashPassword(randomBytes(32).toString('base64url'));
+}
+
+export function setPassword(userId: string, password: string): void {
+  const { hash, salt } = hashPassword(password);
+  run('UPDATE users SET password_hash = ?, password_salt = ?, has_password = 1 WHERE id = ?', [
+    hash,
+    salt,
+    userId,
+  ]);
+}
+
+/** Signs the user out everywhere except one session (used after a password change). */
+export function destroyOtherSessions(userId: string, keepSessionId: string | null): number {
+  const row = get<{ c: number }>('SELECT COUNT(*) AS c FROM sessions WHERE user_id = ? AND id != ?', [
+    userId,
+    keepSessionId ?? '',
+  ]);
+  run('DELETE FROM sessions WHERE user_id = ? AND id != ?', [userId, keepSessionId ?? '']);
+  return Number(row?.c ?? 0);
+}
+
+export function markIdentifierVerified(userId: string, channel: 'email' | 'phone'): void {
+  const column = channel === 'email' ? 'email_verified' : 'phone_verified';
+  run(`UPDATE users SET ${column} = 1 WHERE id = ?`, [userId]);
 }
 
 export function readCookie(req: Request, name: string): string | undefined {

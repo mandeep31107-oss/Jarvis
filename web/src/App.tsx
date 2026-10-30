@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { AuthPage } from './components/AuthPage';
 import { Shell, VIEW_META, type ViewId } from './components/Shell';
 import { Notice, Pill, Spinner } from './components/ui';
-import { api, ApiError } from './lib/api';
+import { api } from './lib/api';
 import { useAsync, useInterval } from './lib/hooks';
-import type { Capabilities, User, VoiceSettings } from './lib/types';
+import type { AuthStatus, Capabilities, User, VoiceSettings } from './lib/types';
 import BriefingView from './views/BriefingView';
 import ChatView from './views/ChatView';
 import TasksView from './views/TasksView';
@@ -15,12 +16,6 @@ import ResearchView from './views/ResearchView';
 import FinanceView from './views/FinanceView';
 import ComplianceView from './views/ComplianceView';
 import SecurityView from './views/SecurityView';
-
-interface AuthStatus {
-  needsSetup: boolean;
-  authenticated: boolean;
-  user: User | null;
-}
 
 interface SettingsResponse {
   voice: VoiceSettings;
@@ -38,6 +33,18 @@ const DEFAULT_VOICE: VoiceSettings = {
   readNotifications: false,
   privacyMode: true,
   reducedMotion: false,
+};
+
+const EMPTY_METHODS: AuthStatus['methods'] = {
+  password: true,
+  emailOtp: false,
+  phoneOtp: false,
+  emailOtpMode: 'not-configured',
+  phoneOtpMode: 'not-configured',
+  emailTransport: null,
+  smsTransport: null,
+  devCodesRevealed: false,
+  googleOAuth: false,
 };
 
 export default function App() {
@@ -70,115 +77,33 @@ export default function App() {
     );
   }
 
-  if (auth.data?.needsSetup) {
-    return <AuthPage mode="setup" onSuccess={auth.reload} />;
+  const status = auth.data;
+
+  if (status?.needsSetup) {
+    return (
+      <AuthPage
+        initialTab="signup"
+        allowSignup
+        methods={status.methods}
+        policy={status.otp}
+        onSuccess={auth.reload}
+      />
+    );
   }
 
-  if (!auth.data?.authenticated || !auth.data.user) {
-    return <AuthPage mode="login" onSuccess={auth.reload} />;
+  if (!status?.authenticated || !status.user) {
+    return (
+      <AuthPage
+        initialTab="login"
+        allowSignup={false}
+        methods={status?.methods ?? EMPTY_METHODS}
+        policy={status?.otp}
+        onSuccess={auth.reload}
+      />
+    );
   }
 
-  return <Dashboard user={auth.data.user} onSignedOut={auth.reload} />;
-}
-
-function AuthPage({ mode, onSuccess }: { mode: 'setup' | 'login'; onSuccess: () => void }) {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      if (mode === 'setup') {
-        await api.post('/auth/setup', { email, name, password });
-      } else {
-        await api.post('/auth/login', { email, password });
-      }
-      onSuccess();
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : err instanceof Error ? err.message : 'Failed';
-      setError(message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="auth">
-      <div className="auth__card">
-        <div className="auth__mark">
-          <div className="brand__mark" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <circle cx="12" cy="12" r="3.2" />
-              <circle cx="12" cy="12" r="8" opacity="0.45" />
-              <path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" opacity="0.7" />
-            </svg>
-          </div>
-          <div>
-            <div className="auth__title">J.A.R.V.I.S.</div>
-            <div className="auth__sub">
-              {mode === 'setup' ? 'First-run owner enrolment' : 'Owner sign-in'}
-            </div>
-          </div>
-        </div>
-
-        {mode === 'setup' && (
-          <Notice tone="cyan" title="This screen appears once">
-            Create your owner account. It is stored locally in this installation and there is no
-            recovery email or password reset — keep the password safe.
-          </Notice>
-        )}
-
-        {error && <Notice tone="red" title="Could not continue">{error}</Notice>}
-
-        <form className="auth__form" onSubmit={submit}>
-          {mode === 'setup' && (
-            <label className="field">
-              <span className="field__label">Your name</span>
-              <input value={name} onChange={(e) => setName(e.target.value)} required minLength={1} autoComplete="name" />
-            </label>
-          )}
-          <label className="field">
-            <span className="field__label">Email</span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="username"
-              placeholder="you@example.com"
-            />
-          </label>
-          <label className="field">
-            <span className="field__label">Password</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={mode === 'setup' ? 10 : 1}
-              autoComplete={mode === 'setup' ? 'new-password' : 'current-password'}
-            />
-            {mode === 'setup' && (
-              <span className="field__hint">At least 10 characters, with a letter and a number.</span>
-            )}
-          </label>
-          <button className="btn btn--primary btn--md" type="submit" disabled={busy}>
-            {busy ? 'Please wait…' : mode === 'setup' ? 'Create owner account' : 'Sign in'}
-          </button>
-        </form>
-
-        <p className="auth__foot">
-          Credentials stay on this server. Passwords are hashed with scrypt; the session cookie is
-          HTTP-only and SameSite=Strict. J.A.R.V.I.S. never stores passwords in memory or logs.
-        </p>
-      </div>
-    </div>
-  );
+  return <Dashboard user={status.user} onSignedOut={auth.reload} />;
 }
 
 function Dashboard({ user, onSignedOut }: { user: User; onSignedOut: () => void }) {
@@ -279,6 +204,7 @@ function Dashboard({ user, onSignedOut }: { user: User; onSignedOut: () => void 
       {view === 'compliance' && <ComplianceView />}
       {view === 'security' && (
         <SecurityView
+          user={user}
           capabilities={capabilities.data}
           voice={voice}
           autonomy={autonomy}

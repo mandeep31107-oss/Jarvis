@@ -5,7 +5,7 @@ import type { AppConfig } from './config.js';
 import type { AiProvider } from './ai/types.js';
 import { logger, errorMessage } from './logger.js';
 import { attachUser } from './security/auth.js';
-import { apiLimiter, authLimiter, csrfGuard, securityHeaders } from './security/middleware.js';
+import { apiLimiter, csrfGuard, makeAuthLimiter, securityHeaders } from './security/middleware.js';
 import { authRouter } from './routes/auth.js';
 import { chatRouter } from './routes/chat.js';
 import { tasksRouter } from './routes/tasks.js';
@@ -43,7 +43,7 @@ export async function buildApp(deps: AppDeps, opts: BuildOptions = {}): Promise<
   app.use(csrfGuard);
   app.use('/api', apiLimiter);
 
-  app.use('/api/auth', authLimiter, authRouter(config));
+  app.use('/api/auth', makeAuthLimiter(config.authRateLimit), authRouter(config));
   app.use('/api/chat', chatRouter(deps));
   app.use('/api/tasks', tasksRouter());
   app.use('/api/approvals', approvalsRouter(config));

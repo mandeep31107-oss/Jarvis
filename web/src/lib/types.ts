@@ -1,7 +1,43 @@
 export interface User {
   id: string;
-  email: string;
+  email: string | null;
+  phone: string | null;
   name: string;
+  emailVerified?: boolean;
+  phoneVerified?: boolean;
+  hasPassword?: boolean;
+}
+
+export type DeliveryMode = 'ready' | 'console' | 'not-configured';
+
+export interface AuthMethods {
+  password: boolean;
+  emailOtp: boolean;
+  phoneOtp: boolean;
+  emailOtpMode: DeliveryMode;
+  phoneOtpMode: DeliveryMode;
+  emailTransport: string | null;
+  smsTransport: string | null;
+  devCodesRevealed: boolean;
+  googleOAuth: boolean;
+}
+
+export interface AuthStatus {
+  needsSetup: boolean;
+  authenticated: boolean;
+  user: User | null;
+  methods: AuthMethods;
+  otp: { ttlSeconds: number; maxAttempts: number };
+}
+
+export interface OtpChallenge {
+  challengeId: string;
+  channel: 'email' | 'phone';
+  maskedTarget: string;
+  expiresInSeconds: number;
+  transport: string;
+  devCode?: string;
+  message: string;
 }
 
 export type AgentStatus = 'active' | 'limited' | 'planned';

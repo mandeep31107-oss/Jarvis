@@ -34,6 +34,33 @@ const envSchema = z.object({
     .transform((v) => v.toLowerCase() === 'true'),
   RESEARCH_ALLOWED_HOSTS: z.string().default(''),
   WAKE_PHRASE: z.string().min(2).max(40).default('jarvis'),
+
+  // --- one-time passcodes (email / SMS sign-in) -------------------------
+  OTP_TTL_SECONDS: z.coerce.number().int().min(60).max(1800).default(300),
+  OTP_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(5),
+  DEFAULT_COUNTRY_CODE: z
+    .string()
+    .regex(/^\+[1-9]\d{0,3}$/, 'Use E.164 format, e.g. +91')
+    .default('+91'),
+
+  // --- email delivery ---------------------------------------------------
+  AUTH_RATE_LIMIT: z.coerce.number().int().min(1).max(10_000).default(20),
+  MAIL_PROVIDER: z.enum(['console', 'smtp']).default('console'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  SMTP_SECURE: z
+    .string()
+    .default('false')
+    .transform((v) => v.toLowerCase() === 'true'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  MAIL_FROM: z.string().optional(),
+
+  // --- SMS delivery -----------------------------------------------------
+  SMS_PROVIDER: z.enum(['console', 'twilio']).default('console'),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_FROM: z.string().optional(),
 });
 
 export interface AppConfig {
@@ -44,6 +71,7 @@ export interface AppConfig {
   dbFile: string;
   sessionSecret: string;
   sessionTtlHours: number;
+  authRateLimit: number;
   /** True when SESSION_SECRET was missing and a throwaway one was generated. */
   ephemeralSessionSecret: boolean;
   ai: {
@@ -57,6 +85,28 @@ export interface AppConfig {
     priceOutputPerMTok: number;
   };
   autonomyLevel: 1 | 2 | 3;
+  otp: {
+    ttlSeconds: number;
+    maxAttempts: number;
+    /** Codes may be revealed to the browser only in non-production + console delivery. */
+    revealDevCodes: boolean;
+  };
+  mail: {
+    provider: 'console' | 'smtp';
+    host: string | null;
+    port: number;
+    secure: boolean;
+    user: string | null;
+    pass: string | null;
+    from: string;
+  };
+  sms: {
+    provider: 'console' | 'twilio';
+    accountSid: string | null;
+    authToken: string | null;
+    from: string | null;
+  };
+  defaultCountryCode: string;
   allowOutboundFetch: boolean;
   researchAllowedHosts: string[];
   wakePhrase: string;
@@ -92,6 +142,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new Error(`AI_PROVIDER=${e.AI_PROVIDER} requires AI_API_KEY to be set.`);
   }
 
+  if (e.MAIL_PROVIDER === 'smtp' && (!e.SMTP_HOST || !e.SMTP_USER || !e.SMTP_PASS)) {
+    throw new Error('MAIL_PROVIDER=smtp requires SMTP_HOST, SMTP_USER and SMTP_PASS.');
+  }
+  if (e.SMS_PROVIDER === 'twilio' && (!e.TWILIO_ACCOUNT_SID || !e.TWILIO_AUTH_TOKEN || !e.TWILIO_FROM)) {
+    throw new Error('SMS_PROVIDER=twilio requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_FROM.');
+  }
+
   const dataDir = path.resolve(process.cwd(), e.DATA_DIR);
 
   return {
@@ -102,6 +159,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     dbFile: path.join(dataDir, 'jarvis.sqlite'),
     sessionSecret,
     sessionTtlHours: e.SESSION_TTL_HOURS,
+    /** Auth requests allowed per IP per 15 minutes (tests raise this). */
+    authRateLimit: e.AUTH_RATE_LIMIT,
     ephemeralSessionSecret: ephemeral,
     ai: {
       provider: e.AI_PROVIDER,
@@ -114,6 +173,28 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       priceOutputPerMTok: e.AI_PRICE_OUTPUT_PER_MTOK,
     },
     autonomyLevel: e.AUTONOMY_LEVEL as 1 | 2 | 3,
+    otp: {
+      ttlSeconds: e.OTP_TTL_SECONDS,
+      maxAttempts: e.OTP_MAX_ATTEMPTS,
+      // Never reveal passcodes in production, whatever the delivery provider is.
+      revealDevCodes: e.NODE_ENV !== 'production',
+    },
+    mail: {
+      provider: e.MAIL_PROVIDER,
+      host: e.SMTP_HOST ?? null,
+      port: e.SMTP_PORT,
+      secure: e.SMTP_SECURE,
+      user: e.SMTP_USER ?? null,
+      pass: e.SMTP_PASS ?? null,
+      from: e.MAIL_FROM ?? e.SMTP_USER ?? 'jarvis@localhost',
+    },
+    sms: {
+      provider: e.SMS_PROVIDER,
+      accountSid: e.TWILIO_ACCOUNT_SID ?? null,
+      authToken: e.TWILIO_AUTH_TOKEN ?? null,
+      from: e.TWILIO_FROM ?? null,
+    },
+    defaultCountryCode: e.DEFAULT_COUNTRY_CODE,
     allowOutboundFetch: e.ALLOW_OUTBOUND_FETCH,
     researchAllowedHosts: e.RESEARCH_ALLOWED_HOSTS.split(',')
       .map((h) => h.trim().toLowerCase())

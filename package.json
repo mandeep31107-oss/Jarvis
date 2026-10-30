@@ -2,7 +2,7 @@
   "name": "jarvis",
   "version": "0.1.0",
   "private": true,
-  "description": "J.A.R.V.I.S. \u2014 permission-controlled personal AI operating system (foundation build)",
+  "description": "J.A.R.V.I.S. — permission-controlled personal AI operating system (foundation build)",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -22,6 +22,7 @@
     "dotenv": "^16.6.1",
     "express": "^4.22.3",
     "express-rate-limit": "^8.7.2",
+    "nodemailer": "^10.3.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^3.25.76"

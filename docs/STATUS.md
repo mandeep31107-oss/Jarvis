@@ -9,7 +9,7 @@ disagree, treat this document as correct and open an issue.
 
 | # | Milestone | State | What exists | What is missing |
 | --- | --- | --- | --- | --- |
-| 1 | Foundation | ✅ done | Repo structure, responsive dashboard, validated config, SQLite schema + migrations, structured logging, health check, 66 tests | CI pipeline, Docker image |
+| 1 | Foundation | ✅ done | Repo structure, responsive dashboard, validated config, SQLite schema + migrations, structured logging, health check, 110 tests | CI pipeline, Docker image |
 | 2 | Conversation | ✅ done | Provider abstraction (offline / any OpenAI-compatible / Ollama), SSE token streaming, persistent threads, browser voice in + out, EN/HI/Hinglish detection, barge-in interruption | Speaker verification / enrolment; local Whisper STT; server-side TTS |
 | 3 | Task management | ✅ done¹ | Tasks with priority, due dates, dependencies, statuses; approval centre; audit trail; live run events with real stage progress | Background worker/queue, reminders, calendar sync, push notifications |
 | 4 | Research | 🟡 partial | SSRF-guarded URL fetch, verbatim source storage with dates, research library UI, approval gate | **No search API**, no automatic discovery, no version comparison or diffing |
@@ -18,22 +18,37 @@ disagree, treat this document as correct and open an issue.
 | 7 | Communication integrations | ⛔ not started | Integration requirements documented; draft-only social agent marked planned | WhatsApp/Telegram/Instagram/LinkedIn credentials, unified inbox, send/delivery states |
 | 8 | Compliance monitoring | 🟡 partial | Jurisdiction-first register with publication vs effective dates and status workflow | Automated monitoring, change detection, alerts, remediation checklists |
 | 9 | Controlled autonomy | 🟡 partial | Levels 1 and 2 enforced end-to-end; global approval policy; per-action risk | Level 3 scheduler, recurring jobs, rate/resource budgets, emergency stop switch |
-| 10 | Production readiness | 🟡 partial | Strict typecheck, 66 tests, production build with CSP, graceful shutdown, documented security model | CI, backup automation, uptime monitoring, mobile device testing, load testing |
+| 10 | Production readiness | 🟡 partial | Strict typecheck, 110 tests, production build with CSP, graceful shutdown, documented security model | CI, backup automation, uptime monitoring, mobile device testing, load testing |
 
 ¹ Runs execute inside the HTTP request. There is no separate job queue, so "background"
 execution means "while the browser stream is open".
 
 ## Verified facts about this build
 
-- `npm test` → **66 passing tests** across routing, finance maths, output validation, password
+- `npm test` → **110 passing tests** across routing, finance maths, output validation, password
   handling, HTML sanitising, the full HTTP API (auth, CSRF, tasks, chat streaming, approvals,
   autonomy policy, research failure, finance, compliance, secret exposure) and render tests
-  for all 11 views.
+  for all 11 views, plus sign-in/sign-up (email and mobile one-time codes, delivery honesty,
+  rate limits) and the v1→v2 schema migration.
 - `npm run typecheck` → clean, strict mode, server and web.
 - `npm run build` → `web/dist` (~70 KB JS gzipped) + `dist/server`; production server serves
   the SPA with a strict CSP and reports `status: ok` from `/api/health`.
 - Conversation, tasks, approvals, audit, memory, research notes, finance and compliance
   endpoints were exercised end-to-end against the running server.
+
+## Sign-in and sign-up
+
+| Method | State | Notes |
+| --- | --- | --- |
+| Password with email | ✅ | scrypt, 10+ characters, letter + digit |
+| Password with mobile number | ✅ | The login field accepts either identifier |
+| Email one-time code (sign-up and sign-in) | ✅ | Real SMTP delivery once `MAIL_PROVIDER=smtp`; Gmail needs an App Password |
+| Mobile one-time code (sign-up and sign-in) | ✅ | Real SMS once `SMS_PROVIDER=twilio` is configured |
+| Development console transport | ✅ | Code logged and shown on screen, clearly labelled; nothing is sent |
+| Production without credentials | ✅ honest | Methods reported unavailable; API returns 503 instead of pretending |
+| Google one-tap | ⛔ | Disabled button with the reason (`GOOGLE_CLIENT_ID` required) |
+| Link a phone to an existing account | ⛔ | Not built; accounts created by mobile can sign in by mobile |
+| Password reset by email | ⛔ | Not built; use a code or set the password from Settings while signed in |
 
 ## Known limitations
 
@@ -49,6 +64,9 @@ execution means "while the browser stream is open".
 | Voice is browser-dependent | Chrome/Edge required; wake phrase is keyword spotting | Type instead; approvals are always explicit |
 | Runs cannot survive a page reload | Long turns are lost if the tab closes | Re-ask; the partial run is marked cancelled |
 | No backup automation | Disk failure loses data | Copy `data/` while stopped |
+| Sign-in codes are only as private as the mailbox/SIM | Anyone with the inbox or SIM can sign in | Keep 2-Step Verification on the mailbox; review the audit trail |
+| Gmail requires an App Password | Your normal Google password will not work over SMTP | Create one at myaccount.google.com/apppasswords |
+| Twilio charges per SMS and may need DLT registration in India | Mobile codes cost money | Email codes are free within Gmail's sending limits |
 
 ## Security considerations in this build
 

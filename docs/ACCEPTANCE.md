@@ -1,7 +1,7 @@
 # Acceptance criteria and verification
 
 Every criterion from the project brief, mapped to what this build actually does, with a
-procedure you can repeat yourself. **66 automated tests** back the marked items
+procedure you can repeat yourself. **110 automated tests** back the marked items
 (`npm test`); the rest are manual checks.
 
 Legend: ✅ met · 🟡 partial (honest scope) · ⛔ not met in this build
@@ -199,11 +199,41 @@ queued background jobs, there is nothing to cancel after a request ends
 
 ---
 
+## Addendum — sign-in and sign-up by email and mobile (added after the brief)
+
+The owner asked for the start screen to offer **sign-up and login with a Gmail/email one-time
+code and with a mobile number one-time code**, in addition to the password flow, with *real*
+delivery and no pretending.
+
+| Path | State | Evidence |
+| --- | --- | --- |
+| Password sign-in (email **or** mobile number) | ✅ | `tests/auth-delivery.test.ts` › *accepts that password and rejects a wrong one*; `tests/auth-phone.test.ts` › *accepts the mobile number as the password identifier* |
+| Owner sign-up with an email code | ✅ | `tests/auth-otp.test.ts` › *creates the owner when the code is right* |
+| Owner sign-up with a mobile code | ✅ | `tests/auth-phone.test.ts` › *accepts a locally typed number and normalises it to E.164* |
+| Login with an email code | ✅ | `tests/auth-otp.test.ts` › *signs an existing owner in and marks the address verified* |
+| Login with a mobile code | ✅ | `tests/auth-phone.test.ts` › *signs in with a fresh SMS code* |
+| Code is single use, expires, and dies after 5 wrong attempts | ✅ | `tests/auth-otp.test.ts` › *cannot reuse a consumed code*, *locks a challenge after five wrong attempts*, *expires a code that was never used* |
+| Rate limiting per identifier and per IP | ✅ | `tests/auth-otp.test.ts` › *allows three codes per identifier and then refuses* |
+| Real email delivery (SMTP, Gmail App Password) | ✅ code path | `server/services/delivery.ts` via nodemailer; exercised live by setting `MAIL_PROVIDER=smtp` (see SETUP-WINDOWS step 5a) |
+| Real SMS delivery (Twilio) | ✅ code path | `server/services/delivery.ts` REST call; needs a Twilio account (step 5b) |
+| Honest behaviour without credentials | ✅ | `tests/auth-delivery.test.ts` › *refuses to email a code instead of pretending* (503), *advertises only methods that can actually work* |
+| No code ever revealed in production | ✅ | production build: `emailDeliveryMode` is `not-configured`, the method is hidden and the API refuses; `tests/auth-delivery.test.ts` |
+| Google one-tap sign-in | ⛔ not implemented | Button disabled with an explanation; needs a Google Cloud OAuth client |
+| Link a phone number to an existing account | ⛔ not implemented | Sign-in by mobile works for accounts created with a mobile number |
+| Password reset by email | ⛔ not implemented | Use a code (if configured) or set the password while signed in |
+
+**Manual:** open a fresh install (`data/` absent) → *Create owner* tab → choose **Email code**.
+In development the code is printed on screen with the label *Development mode — nothing was
+sent*; enter it, then set a password when prompted. Restart with `MAIL_PROVIDER=smtp` and real
+SMTP credentials and repeat: the code arrives by email and is never shown in the browser.
+
+---
+
 ## Running the automated suite
 
 ```bash
 npm ci          # or npm install
-npm test        # 66 tests
+npm test        # 110 tests
 npm run typecheck
 npm run build
 ```
@@ -211,8 +241,8 @@ npm run build
 Expected tail:
 
 ```
-Test Files  5 passed (5)
-     Tests  66 passed (66)
+Test Files  10 passed (10)
+     Tests  110 passed (110)
 ```
 
 ## Manual end-to-end smoke test (5 minutes)
@@ -221,7 +251,8 @@ Test Files  5 passed (5)
 npm run dev
 ```
 
-1. Enrol as owner → dashboard loads with an honest warning list.
+1. Enrol as owner → dashboard loads with an honest warning list. Try both flows: *Password*,
+   and *Email code* (development mode shows the code and says nothing was sent).
 2. Conversation: "create a task to validate my pricing tomorrow" → task chips appear, task
    exists in **Tasks**.
 3. Ask a legal question → routed to *Legal & Compliance Research*, which asks for jurisdiction.

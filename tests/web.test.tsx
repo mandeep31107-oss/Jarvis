@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Capabilities, VoiceSettings } from '../web/src/lib/types';
+import { AuthPage } from '../web/src/components/AuthPage';
+import type { AuthMethods, Capabilities, VoiceSettings } from '../web/src/lib/types';
 import { views } from './view-fixtures';
 
 /**
@@ -38,6 +39,16 @@ const voice: VoiceSettings = {
   readNotifications: false,
   privacyMode: true,
   reducedMotion: false,
+};
+
+const account = {
+  id: 'u1',
+  email: 'o@example.com',
+  phone: null,
+  name: 'Mander',
+  emailVerified: true,
+  phoneVerified: false,
+  hasPassword: false,
 };
 
 const fixtures: Record<string, unknown> = {
@@ -111,7 +122,23 @@ const fixtures: Record<string, unknown> = {
   },
   '/system/settings': { voice, autonomyLevel: 2, autonomyDefault: 2 },
   '/chat/conversations': { conversations: [] },
-  '/auth/status': { needsSetup: false, authenticated: true, user: { id: 'u1', email: 'o@example.com', name: 'Mander' } },
+  '/auth/status': {
+    needsSetup: false,
+    authenticated: true,
+    user: account,
+    methods: {
+      password: true,
+      emailOtp: true,
+      phoneOtp: true,
+      emailOtpMode: 'console',
+      phoneOtpMode: 'console',
+      emailTransport: 'console',
+      smsTransport: 'console',
+      devCodesRevealed: true,
+      googleOAuth: false,
+    },
+    otp: { ttlSeconds: 300, maxAttempts: 5 },
+  },
 };
 
 vi.mock('../web/src/lib/api', async () => {
@@ -187,6 +214,7 @@ describe('view rendering with real response shapes', () => {
   it('renders settings and security', async () => {
     render(
       <views.default.Security
+        user={account}
         capabilities={capabilities}
         voice={voice}
         autonomy={2}
@@ -196,6 +224,8 @@ describe('view rendering with real response shapes', () => {
     );
     expect(await screen.findByText('Audit trail')).toBeTruthy();
     expect(screen.getByText(/Speaker verification is not implemented/)).toBeTruthy();
+    // The fixture account was created with a code, so the panel offers to set a password.
+    expect(screen.getByText('Set a password')).toBeTruthy();
   });
 
   it('renders the conversation view and reports voice limits', async () => {
@@ -209,5 +239,64 @@ describe('view rendering with real response shapes', () => {
     );
     expect(await screen.findByText('Say something, or type')).toBeTruthy();
     expect(screen.getByText(/Speaker verification is not implemented/)).toBeTruthy();
+  });
+});
+
+const allMethods: AuthMethods = {
+  password: true,
+  emailOtp: true,
+  phoneOtp: true,
+  emailOtpMode: 'console',
+  phoneOtpMode: 'console',
+  emailTransport: 'console',
+  smsTransport: 'console',
+  devCodesRevealed: true,
+  googleOAuth: false,
+};
+
+const noCodeMethods: AuthMethods = {
+  ...allMethods,
+  emailOtp: false,
+  phoneOtp: false,
+  emailOtpMode: 'not-configured',
+  phoneOtpMode: 'not-configured',
+  emailTransport: null,
+  smsTransport: null,
+  devCodesRevealed: false,
+};
+
+describe('start screen', () => {
+  it('offers sign in and sign up with every configured method', () => {
+    render(
+      <AuthPage initialTab="signup" allowSignup methods={allMethods} onSuccess={() => undefined} />,
+    );
+    expect(screen.getByRole('tab', { name: 'Sign in' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Create owner' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Email code/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Mobile code/ })).toBeTruthy();
+    expect(screen.getByText('Create the owner account')).toBeTruthy();
+    // Google one-tap is deliberately absent, and says why.
+    expect(screen.getByText(/GOOGLE_CLIENT_ID/)).toBeTruthy();
+  });
+
+  it('hides sign-up once an owner exists', () => {
+    render(
+      <AuthPage initialTab="login" allowSignup={false} methods={allMethods} onSuccess={() => undefined} />,
+    );
+    expect(screen.queryByRole('tab', { name: 'Create owner' })).toBeNull();
+    expect(screen.getByText('Sign in to your operating system')).toBeTruthy();
+  });
+
+  it('marks unconfigured channels as unavailable instead of pretending', () => {
+    render(
+      <AuthPage initialTab="signup" allowSignup methods={noCodeMethods} onSuccess={() => undefined} />,
+    );
+    const email = screen.getByRole('button', { name: /Email code/ });
+    const phone = screen.getByRole('button', { name: /Mobile code/ });
+    expect(email.textContent).toContain('off');
+    expect(phone.textContent).toContain('off');
+    fireEvent.click(email);
+    expect(screen.getByText(/MAIL_PROVIDER=smtp/)).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Send code' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -26,9 +26,24 @@ npm install
 npm run dev
 ```
 
-Open <http://localhost:5173>. The first visit shows a one-time **owner enrolment** screen:
-choose your name, email and a password of at least 10 characters. There is no password
-recovery — this is a local-first installation, so keep it safe.
+Open <http://localhost:5173>. The first visit shows a one-time **owner enrolment** screen with
+three real ways to sign in — and after enrolment the same three ways work from the sign-in tab:
+
+| Method | Configuration needed |
+| --- | --- |
+| Password (email **or** mobile number) | none |
+| Email 6-digit code | `MAIL_PROVIDER=smtp` + SMTP credentials (Gmail App Password works) |
+| Mobile 6-digit code | `SMS_PROVIDER=twilio` + Twilio credentials |
+
+With no credentials both code methods run in **development console mode**: the code is logged
+and shown on screen, and the UI says plainly that nothing was sent. In `NODE_ENV=production`
+they are reported as unavailable and the API returns `503 delivery_not_configured` — this build
+never pretends a message went out. Configure real delivery in
+[docs/SETUP-WINDOWS.md](docs/SETUP-WINDOWS.md) (steps 5a and 5b).
+
+Google one-tap sign-in is **not** implemented: the button is disabled with an explanation
+because it needs a Google Cloud OAuth client. There is no password-reset email yet either —
+an email code (if configured) is the recovery path.
 
 No API key is required to start. With the default `AI_PROVIDER=offline` the assistant replies
 from labelled offline templates so every workflow can be exercised. To get real reasoning,
@@ -63,7 +78,7 @@ answers: if the provider fails, the turn fails visibly with a fix hint.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Dev server + Vite middleware on <http://localhost:5173> (binds `0.0.0.0`) |
-| `npm test` | 66 automated tests (routing, finance maths, validation, security, HTTP API, UI render) |
+| `npm test` | 110 automated tests (routing, finance maths, validation, security, auth/OTP, migrations, HTTP API, UI render) |
 | `npm run typecheck` | Strict TypeScript check for server and web |
 | `npm run build` | Production build (`web/dist` + `dist/server`) |
 | `npm start` | Run the production build (requires `SESSION_SECRET`) |
@@ -72,6 +87,8 @@ answers: if the provider fails, the turn fails visibly with a fix hint.
 
 | Area | Status | Notes |
 | --- | --- | --- |
+| Sign-in: password, email code, mobile code | ✅ | scrypt passwords; HMAC-hashed single-use codes; real SMTP/Twilio delivery once configured |
+| Sign-in: Google one-tap / passkeys | ⛔ planned | Button is disabled with an explanation; no OAuth client |
 | Conversation (text + streaming) | ✅ | Provider-abstracted, SSE token streaming, 12-agent routing |
 | Voice input / output / wake phrase | ✅ | Browser Web Speech API; Chrome or Edge; language, rate, pitch, barge-in |
 | Speaker verification / enrolment | ⛔ planned | Voice is never treated as authorization |
@@ -96,6 +113,8 @@ Milestone-by-milestone detail, limitations and the next steps:
 server/            Node + Express + TypeScript API (all secrets live here)
   config.ts        Zod-validated environment configuration
   security/        scrypt passwords, sessions, CSRF guard, headers, rate limits
+  services/otp.ts  One-time codes: normalisation, HMAC hashing, limits, single use
+  services/delivery.ts  SMTP (nodemailer) and Twilio senders with honest delivery states
   db/              SQLite schema + migrations + typed query helpers
   repo/            One module per entity — the only place SQL is written
   ai/              Provider abstraction, routing, prompt building, output validation

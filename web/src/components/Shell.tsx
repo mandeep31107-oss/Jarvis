@@ -126,7 +126,7 @@ export function Shell({
             <span className="user-chip__avatar">{initials || 'O'}</span>
             <div style={{ minWidth: 0 }}>
               <div className="user-chip__name">{user.name}</div>
-              <div className="user-chip__mail">{user.email}</div>
+              <div className="user-chip__mail">{user.email ?? user.phone ?? 'code sign-in'}</div>
             </div>
           </div>
           <button className="btn btn--subtle btn--sm" onClick={onLogout}>

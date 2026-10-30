@@ -89,9 +89,16 @@ interface Migration {
   version: number;
   name: string;
   sql: string;
+  /**
+   * True when the migration rebuilds a table other tables reference. Foreign
+   * keys are disabled for the duration so the implicit DELETE on DROP TABLE
+   * cannot cascade into sessions/tasks, then re-checked before commit.
+   */
+  foreignKeysOff?: boolean;
 }
 
-const MIGRATIONS: Migration[] = [
+/** Exported for the upgrade test: it applies v1 by hand and then runs v2. */
+export const MIGRATIONS: readonly Migration[] = [
   {
     version: 1,
     name: 'core',
@@ -299,6 +306,51 @@ const MIGRATIONS: Migration[] = [
       CREATE INDEX idx_compliance_user ON compliance_items(user_id, jurisdiction, area);
     `,
   },
+  {
+    version: 2,
+    name: 'otp_sign_in',
+    foreignKeysOff: true,
+    sql: /* sql */ `
+      -- users can now be identified by email, phone, or both. SQLite cannot
+      -- relax NOT NULL in place, so the table is rebuilt and rows copied.
+      CREATE TABLE users_new (
+        id             TEXT PRIMARY KEY,
+        email          TEXT UNIQUE,
+        phone          TEXT UNIQUE,
+        name           TEXT NOT NULL,
+        password_hash  TEXT NOT NULL,
+        password_salt  TEXT NOT NULL,
+        email_verified INTEGER NOT NULL DEFAULT 0,
+        phone_verified INTEGER NOT NULL DEFAULT 0,
+        has_password   INTEGER NOT NULL DEFAULT 1,
+        created_at     TEXT NOT NULL
+      );
+
+      INSERT INTO users_new (id, email, phone, name, password_hash, password_salt,
+                             email_verified, phone_verified, has_password, created_at)
+      SELECT id, lower(email), NULL, name, password_hash, password_salt, 1, 0, 1, created_at
+      FROM users;
+
+      DROP TABLE users;
+      ALTER TABLE users_new RENAME TO users;
+
+      CREATE TABLE otp_challenges (
+        id          TEXT PRIMARY KEY,
+        user_id     TEXT,
+        channel     TEXT NOT NULL CHECK (channel IN ('email','phone')),
+        target      TEXT NOT NULL,
+        purpose     TEXT NOT NULL CHECK (purpose IN ('signup','login')),
+        code_hash   TEXT NOT NULL,
+        expires_at  TEXT NOT NULL,
+        attempts    INTEGER NOT NULL DEFAULT 0,
+        consumed_at TEXT,
+        ip          TEXT,
+        created_at  TEXT NOT NULL
+      );
+      CREATE INDEX idx_otp_target ON otp_challenges(target, purpose, created_at DESC);
+      CREATE INDEX idx_otp_created ON otp_challenges(created_at);
+    `,
+  },
 ];
 
 function currentVersion(database: DatabaseSync): number {
@@ -323,6 +375,9 @@ function migrate(database: DatabaseSync): void {
 
   for (const migration of MIGRATIONS) {
     if (migration.version <= applied) continue;
+    // PRAGMA foreign_keys is a no-op inside a transaction, so it must be set
+    // before BEGIN — and only when the migration asks for it.
+    if (migration.foreignKeysOff) database.exec('PRAGMA foreign_keys = OFF');
     database.exec('BEGIN IMMEDIATE');
     try {
       database.exec(migration.sql);
@@ -334,7 +389,17 @@ function migrate(database: DatabaseSync): void {
       logger.info('migration applied', { version: migration.version, name: migration.name });
     } catch (err) {
       database.exec('ROLLBACK');
+      if (migration.foreignKeysOff) database.exec('PRAGMA foreign_keys = ON');
       throw err;
+    }
+    if (migration.foreignKeysOff) {
+      database.exec('PRAGMA foreign_keys = ON');
+      const violations = database.prepare('PRAGMA foreign_key_check').all();
+      if (violations.length > 0) {
+        throw new Error(
+          `Migration ${migration.version} left ${violations.length} foreign-key violation(s); restore from backup.`,
+        );
+      }
     }
   }
 }

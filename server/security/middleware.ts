@@ -63,10 +63,17 @@ export const apiLimiter = rateLimit({
   skip: (req) => req.path === '/health',
 });
 
-export const authLimiter = rateLimit({
-  windowMs: 15 * 60_000,
-  limit: 20,
-  standardHeaders: 'draft-7',
-  legacyHeaders: false,
-  message: { error: 'too_many_attempts', message: 'Too many authentication attempts. Try again later.' },
-});
+/**
+ * Per-IP ceiling on authentication traffic, on top of the per-identifier limits
+ * inside the router. Defaults to 20 requests per 15 minutes; configurable with
+ * AUTH_RATE_LIMIT (the test suite raises it).
+ */
+export function makeAuthLimiter(limit: number) {
+  return rateLimit({
+    windowMs: 15 * 60_000,
+    limit,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    message: { error: 'too_many_attempts', message: 'Too many authentication attempts. Try again later.' },
+  });
+}

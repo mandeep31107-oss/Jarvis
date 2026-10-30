@@ -20,23 +20,61 @@ model provider.
 
 ### Authentication and sessions
 
-- First-run owner creation only; once a user exists, `/api/auth/setup` returns 409.
+Three ways in, all real:
+
+1. **Password** — email *or* mobile number plus a password.
+2. **Email one-time code** — SMTP (Gmail App Password, Outlook, any SMTP server).
+3. **Mobile one-time code** — SMS through Twilio.
+
+- First-run owner creation only; once a user exists, `/api/auth/setup` and any
+  `purpose=signup` code request return 409.
 - Passwords hashed with **scrypt** (64-byte key, per-user random salt), compared with
-  `timingSafeEqual`. No plaintext password is ever stored or logged.
+  `timingSafeEqual`. No plaintext password is ever stored or logged, and the API never
+  serialises `password_hash`/`password_salt` (there is a test for that).
 - Password policy: ≥10 characters, at least one letter and one digit.
+- Accounts created by a code have **no usable password**: `has_password = 0` and a random
+  unguessable hash. Password sign-in for them fails with an explicit message instead of a
+  generic error, and a signed-in session may set the first password without the (non-existent)
+  current one.
 - Session tokens are 32 random bytes, stored **hashed** (SHA-256) — a database leak does not
   yield usable cookies.
 - Cookie: `HttpOnly`, `SameSite=Strict`, `Secure` in production, 7-day lifetime.
-- Changing a password deletes every other session.
+- Changing a password deletes every other session (you stay signed in on this device).
 - Login failures return an identical response for unknown user and wrong password, and are
   audit-logged.
+
+### One-time codes
+
+- 6 digits from `crypto.randomInt`, so the distribution is uniform.
+- Stored **only** as `HMAC-SHA256(SESSION_SECRET, challengeId:target:code)`, compared with
+  `timingSafeEqual` — a database leak reveals no usable code.
+- 300-second lifetime, **single use**, and a new code for the same identifier invalidates the
+  previous one.
+- The attempt counter is incremented **before** the comparison, so a crash cannot grant
+  unlimited tries; 5 wrong attempts destroy the challenge (further submissions return 429 even
+  with the right code).
+- 3 codes per identifier per 15 minutes, shared between sign-up and sign-in so switching tabs
+  cannot double the budget. 20 authentication requests per IP per 15 minutes
+  (`AUTH_RATE_LIMIT`), on top of 240 requests/minute for the rest of the API.
+- Email addresses normalised to lower case; mobile numbers normalised to E.164 with
+  `DEFAULT_COUNTRY_CODE` (+91) for numbers typed without a code. Masks (`o****@gmail.com`,
+  `+91*******210`) are used everywhere a code's destination is shown or logged.
+- A failed delivery **destroys** the challenge, so a code that never arrived cannot be used;
+  the API returns 502 with the provider's reason.
+- **Development honesty:** with `MAIL_PROVIDER=console`/`SMS_PROVIDER=console` nothing is sent.
+  The code is written to the log and returned to the browser, and the UI labels it
+  "Development mode — nothing was sent". In `NODE_ENV=production` the console transport is
+  treated as *not configured*: those methods are hidden and the API returns
+  `503 delivery_not_configured`. A production build can never leak a code to the browser.
+- Delivered content never includes account names or other data: just the code and its expiry.
 
 ### Request integrity
 
 - **CSRF**: `SameSite=Strict` plus a required `X-JARVIS-Request: 1` header on every
   state-changing request. Cross-origin scripts cannot add custom headers without a preflight,
   which this server never grants.
-- Rate limits: 240 requests/minute per IP on `/api`, 20 attempts/15 minutes on `/api/auth`.
+- Rate limits: 240 requests/minute per IP on `/api`, 20 attempts/15 minutes on `/api/auth`
+  (configurable with `AUTH_RATE_LIMIT`), plus per-identifier code limits inside the OTP layer.
 - Request bodies capped at 256 KB; all inputs validated with Zod before touching a repository.
 - Security headers: `X-Content-Type-Options`, `Referrer-Policy: no-referrer`,
   `Cross-Origin-Opener-Policy`, a restrictive `Permissions-Policy`, and a strict
@@ -93,6 +131,10 @@ model provider.
 | --- | --- | --- | --- |
 | No speaker verification | Any voice can trigger a transcript | Voice never authorizes anything; approvals are explicit clicks | Enrolment + thresholds as a *second* factor |
 | No 2FA / passkeys | Password is a single factor | Strong hashing, rate limit, local-only deployment | WebAuthn second factor |
+| No Google one-tap sign-in | The button exists but is disabled | Email codes work for Gmail addresses today | Needs a Google Cloud OAuth client |
+| No email-based password reset | A forgotten password means using a code (if configured) or a fresh database | Owner can set a password from Settings while signed in | Reset tokens by email |
+| A phone number cannot be linked after enrolment | Mobile sign-in only for accounts created by mobile | Email or password sign-in still works | Add/verify phone from Settings |
+| Codes are only as private as the mailbox/number | Anyone with access to the inbox or SIM can sign in | 5-minute TTL, single use, audit log | Passkeys / hardware keys |
 | No CSRF token rotation | Custom header + SameSite is sufficient for this threat model | Header + Strict cookies | Signed double-submit token when introducing cross-site clients |
 | In-memory SSE bus | Events are not shared across instances | Single-process design | Redis pub/sub |
 | No sandboxed code execution | Nothing runs models' code — deliberate | Not implemented rather than unsafe | Isolated worker with resource limits |
@@ -104,6 +146,8 @@ model provider.
 ## Operational guidance
 
 - Run it on `localhost` or behind a reverse proxy with TLS. Do not expose port 5173 publicly.
+- Treat the mailbox and phone number used for sign-in as credentials: anyone who controls them
+  can request a code and sign in. Keep the app behind your own device lock as well.
 - Set `NODE_ENV=production` and a real `SESSION_SECRET` for anything long-lived.
 - Rotate the provider key periodically; if a key leaks, revoke it at the provider first — it is
   not stored anywhere else, so no local cleanup can undo the exposure.
