@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# build output
+dist/
+web/dist/
+*.tsbuildinfo
+
+# local data (SQLite database, uploaded files) — never commit owner data
+data/
+*.sqlite
+*.sqlite-journal
+*.db
+
+# secrets
+.env
+.env.*
+!.env.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
