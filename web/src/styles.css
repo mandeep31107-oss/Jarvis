@@ -522,7 +522,12 @@ td.num, th.num { text-align: right; font-family: var(--mono); }
   .nav { flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; }
   .nav__label { display: none; }
   .nav__item { width: auto; white-space: nowrap; padding: 8px 12px; }
-  .sidebar__footer { display: none; }
+  .sidebar__footer {
+    display: flex; flex-direction: row; align-items: center; justify-content: space-between;
+    gap: 10px; margin-top: 6px;
+  }
+  .sidebar__footer .user-chip { flex: 1; }
+  .user-chip__mail { display: none; }
   .content { padding: 16px 14px 48px; }
   .topbar { padding: 12px 14px; flex-wrap: wrap; }
   .grid--2, .grid--3, .grid--4 { grid-template-columns: minmax(0, 1fr); }
