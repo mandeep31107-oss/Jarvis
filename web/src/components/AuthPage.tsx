@@ -57,6 +57,17 @@ export function AuthPage({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // Browsers block first-party cookies inside third-party frames, which breaks
+  // sessions in an embedded preview. Better to say so than to fail mysteriously.
+  const [embedded, setEmbedded] = useState(false);
+  useEffect(() => {
+    try {
+      setEmbedded(window.self !== window.top);
+    } catch {
+      setEmbedded(true);
+    }
+  }, []);
+
   const isSignup = tab === 'signup';
   const identifier = method === 'phone' ? phone.trim() : email.trim();
 
@@ -484,6 +495,14 @@ export function AuthPage({
               Skip for now
             </button>
           </form>
+        )}
+
+        {embedded && (
+          <Notice tone="amber" title="Embedded preview">
+            Browsers block the session cookie inside a third-party frame, so signing in here may
+            loop back to this screen. Open the preview in its own tab (or run it locally) and it
+            will work.
+          </Notice>
         )}
 
         <p className="auth__foot">
